@@ -7,6 +7,19 @@
 PyTorch neural network trained on WSPR (Weak Signal Propagation Reporter) spot data
 joined with solar indices from ClickHouse to predict HF radio signal-to-noise ratio.
 
+
+## Repo structure
+Use this layout for the repo
+```
+ki7mt-ai-lab-training/
+├── models/
+│   └── prophet_v2.pth       # The "Production" weights
+├── scripts/
+│   ├── train_v2_pilot.py    # Training logic
+│   └── test_v2_sensitivity.py # Physics checks
+└── results/                 # (New folder) for sensitivity logs
+```
+
 ## Architecture
 
 - **Model**: ResidualBlock network (2 blocks, 256-unit hidden, BatchNorm + skip connections)
