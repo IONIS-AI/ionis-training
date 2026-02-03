@@ -7,6 +7,18 @@
 PyTorch neural network trained on WSPR (Weak Signal Propagation Reporter) spot data
 joined with solar indices from ClickHouse to predict HF radio signal-to-noise ratio.
 
+## Branding
+We are branding this
+
+>IONIS (Ionospheric Neural Inference System): Sounds professional, clean, and describes exactly what the architecture does.
+
+ALl models, scripts need to be refactoroed with the in mind, for example:
+```
+./models/ionis_v2.pth
+
+# Formal model example
+ionis-v2:latest
+```
 
 ## Repo structure
 Use this layout for the repo
