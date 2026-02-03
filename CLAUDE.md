@@ -56,9 +56,20 @@ ki7mt-ai-lab-training/
 - V2.1: 13 features, hash-ordered sampling, SSN-SNR r=+0.0143
 - **Finding**: Data quality is the bottleneck (leaked bands 14%, SNR -99 to +60, ground-wave contamination)
 
-### Phase 3: Data Purge (IN PROGRESS)
+### Phase 3: Data Purge (COMPLETE)
 - SQL filters: `snr[-35,25]`, `band[1,15]`, `distance[500,18000]`
 - Target: SSN-SNR Pearson correlation > 0.1
+
+### Phase 3.5: Stratified Band Sampling (BLOCKED — awaiting re-ingest)
+- UNION ALL stratified query works but exposed **band encoding bug**
+- Root cause: Python ingester stored raw CSV band column (leaked MHz values as band IDs)
+- Bands 4 (40m), 6 (20m), 8 (15m) had <1,100 rows each — data was mislabeled, not missing
+- Band 14 (2.19B rows) = actually 20m; Band 21 (331M rows) = actually 15m; etc.
+- **Fix applied**: All 5 Go CSV ingesters now call `bands.GetBand(freqMHz)` (single source of truth)
+- **New band IDs after re-ingest**: 102=160m, 103=80m, 104=60m, 105=40m, 106=30m, 107=20m, 108=17m, 109=15m, 110=12m, 111=10m
+- **Next**: Re-ingest on 9975WX, then update BAND_TO_HZ and SQL filters in training script
+- Best RMSE so far: 7.22 dB (HF-only, unbalanced), 7.62 dB (stratified but sparse)
+- SSN-SNR correlation: +0.0048 (positive but below 0.1 target — needs balanced 20m/40m data)
 
 ## Data Quality Notes
 

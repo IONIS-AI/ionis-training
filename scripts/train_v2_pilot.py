@@ -20,11 +20,14 @@ DATE_START = '2020-01-01'
 DATE_END = '2026-02-04'
 SOLAR_RESOLUTION = 'daily'
 
-# Phase 3: Data Purge — strict physical filters applied in SQL
+# Phase 3.5: Stratified Band Sampling — equal rows per HF band
 #   snr BETWEEN -35 AND 25:     remove receiver glitches and local overloads
-#   band BETWEEN 1 AND 15:      hard-exclude leaked frequency values (14% of raw)
+#   band IN (1..10):            HF bands only (160m-10m), no VHF/UHF
 #   distance BETWEEN 500 AND 18000: focus on ionospheric skip only
-PHASE = 'Phase 3: Data Purge'
+#   Stratified sampling via UNION ALL of 10 per-band queries (memory-efficient)
+PHASE = 'Phase 3.5: Stratified Band Sampling'
+HF_BANDS = list(range(1, 11))  # bands 1-10 (160m through 10m)
+ROWS_PER_BAND = SAMPLE_SIZE // len(HF_BANDS)  # 1M rows per band for 10M total
 
 # Feature set — 13 features (v2.1):
 #   Core 11 from v2.0 plus 2 interaction features.
@@ -173,9 +176,9 @@ def band_to_hz(band_ids):
 # Target:
 #   SNR in dB (raw, not normalized)
 #
-# Phase 3 SQL filters (Data Purge):
+# Phase 3.5 SQL filters (Stratified Band Sampling):
 #   snr BETWEEN -35 AND 25      — valid WSPR decode range
-#   band BETWEEN 1 AND 15       — standard ADIF band codes only
+#   band IN (1..10)              — HF bands only, stratified sampling
 #   distance BETWEEN 500 AND 18000 — ionospheric skip only
 
 class WSPRDataset(Dataset):
@@ -183,44 +186,73 @@ class WSPRDataset(Dataset):
         print(f"Connecting to {host}...")
         client = clickhouse_connect.get_client(host=host, port=8123)
 
-        # Phase 3: Strict physical filters in SQL.
-        # INNER JOIN on daily solar data — only rows with valid ssn.
-        # ORDER BY cityHash64 for temporal diversity across the full date range.
-        query = f"""
-            WITH solar_daily AS (
-                SELECT date, max(ssn) AS ssn
-                FROM solar.indices_raw FINAL
-                GROUP BY date
-                HAVING ssn > 0
-            )
-            SELECT s.snr, s.distance, s.band,
-                   toHour(s.timestamp), toMonth(s.timestamp), s.azimuth,
-                   toString(s.grid), toString(s.reporter_grid),
-                   sol.ssn
-            FROM wspr.spots_raw s
-            INNER JOIN solar_daily sol
-                ON toDate(s.timestamp) = sol.date
-            WHERE s.timestamp >= '{DATE_START}' AND s.timestamp < '{DATE_END}'
-              AND s.snr BETWEEN -35 AND 25
-              AND s.band BETWEEN 1 AND 15
-              AND s.distance BETWEEN 500 AND 18000
-              AND length(s.grid) >= 4 AND length(s.reporter_grid) >= 4
-            ORDER BY cityHash64(toString(s.timestamp))
-            LIMIT {limit}
-        """
+        # Phase 3.5: Stratified band sampling via UNION ALL.
+        # 10 independent per-band subqueries, each with its own LIMIT.
+        # Memory-efficient: ClickHouse handles 10 small ORDER BY operations
+        # across many cores instead of one giant window function.
+        rows_per_band = ROWS_PER_BAND
+        band_list = ','.join(str(b) for b in HF_BANDS)
+
+        # Build UNION ALL of 10 per-band queries
+        band_subqueries = []
+        for band_id in HF_BANDS:
+            sq = f"""SELECT * FROM (
+                SELECT s.snr, s.distance, s.band,
+                       toHour(s.timestamp) AS hour, toMonth(s.timestamp) AS month,
+                       s.azimuth,
+                       toString(s.grid) AS grid, toString(s.reporter_grid) AS reporter_grid,
+                       sol.ssn
+                FROM wspr.spots_raw s
+                INNER JOIN (
+                    SELECT date, max(ssn) AS ssn
+                    FROM solar.indices_raw FINAL
+                    GROUP BY date
+                    HAVING ssn > 0
+                ) sol ON toDate(s.timestamp) = sol.date
+                WHERE s.band = {band_id}
+                  AND s.timestamp >= '{DATE_START}' AND s.timestamp < '{DATE_END}'
+                  AND s.snr BETWEEN -35 AND 25
+                  AND s.distance BETWEEN 500 AND 18000
+                  AND length(s.grid) >= 4 AND length(s.reporter_grid) >= 4
+                ORDER BY cityHash64(toString(s.timestamp))
+                LIMIT {rows_per_band}
+            )"""
+            band_subqueries.append(sq)
+
+        query = "\nUNION ALL\n".join(band_subqueries)
 
         print(f"Running query ({DATE_START} to {DATE_END}, {SOLAR_RESOLUTION} solar, "
-              f"filtered, hash-ordered)...")
-        print(f"  Filters: snr[-35,25] band[1,15] distance[500,18000]")
+              f"stratified UNION ALL, HF bands 1-10)...")
+        print(f"  Filters: snr[-35,25] band[{band_list}] distance[500,18000]")
+        print(f"  Stratified: {rows_per_band:,} rows per band, {len(HF_BANDS)} bands")
         try:
             result = client.query(query)
             rows = result.result_rows
         except Exception as e:
-            print(f"  Hash-ordered query failed: {e}")
-            print(f"  Falling back to unordered query...")
-            no_order_query = query.replace(
-                "            ORDER BY cityHash64(toString(s.timestamp))\n", "")
-            result = client.query(no_order_query)
+            print(f"  UNION ALL stratified query failed: {e}")
+            print(f"  Falling back to non-stratified query with HF bands 1-10...")
+            fallback_query = f"""
+                WITH solar_daily AS (
+                    SELECT date, max(ssn) AS ssn
+                    FROM solar.indices_raw FINAL
+                    GROUP BY date
+                    HAVING ssn > 0
+                )
+                SELECT s.snr, s.distance, s.band,
+                       toHour(s.timestamp), toMonth(s.timestamp), s.azimuth,
+                       toString(s.grid), toString(s.reporter_grid),
+                       sol.ssn
+                FROM wspr.spots_raw s
+                INNER JOIN solar_daily sol
+                    ON toDate(s.timestamp) = sol.date
+                WHERE s.timestamp >= '{DATE_START}' AND s.timestamp < '{DATE_END}'
+                  AND s.snr BETWEEN -35 AND 25
+                  AND s.band IN ({band_list})
+                  AND s.distance BETWEEN 500 AND 18000
+                  AND length(s.grid) >= 4 AND length(s.reporter_grid) >= 4
+                LIMIT {limit}
+            """
+            result = client.query(fallback_query)
             rows = result.result_rows
 
         n = len(rows)
@@ -229,8 +261,18 @@ class WSPRDataset(Dataset):
         if n == 0:
             raise RuntimeError("Query returned 0 rows — check filters and solar data coverage")
 
+        # Per-band row counts (stratification check)
+        band_col = [r[2] for r in rows]
+        band_arr_check = np.array(band_col, dtype=np.int32)
+        print(f"\n  Per-band row counts (stratified):")
+        for b in sorted(HF_BANDS):
+            cnt = int((band_arr_check == b).sum())
+            hz = BAND_TO_HZ.get(b, 0)
+            label = f"{hz/1e6:.3f}MHz" if hz else f"band={b}"
+            print(f"    Band {b:2d} ({label:>10s}): {cnt:>10,} rows")
+
         # Unpack columns via zip transpose (one pass over rows)
-        print("Unpacking columns...")
+        print("\nUnpacking columns...")
         cols = list(zip(*rows))
         snr       = np.array(cols[0], dtype=np.float32)
         distance  = np.array(cols[1], dtype=np.float32)
@@ -306,7 +348,7 @@ class WSPRDataset(Dataset):
             col = features[:, i]
             print(f"  {name:<20s}  {col.min():8.4f}  {col.mean():8.4f}  {col.max():8.4f}")
 
-        # SSN-SNR correlation diagnostic (Phase 3 target: > 0.1)
+        # SSN-SNR correlation diagnostic (Phase 3.5 target: > 0.1)
         ssn_snr_corr = np.corrcoef(ssn_arr, snr)[0, 1]
         print(f"\n  SSN-SNR Pearson correlation: {ssn_snr_corr:+.4f}")
         if ssn_snr_corr > 0.1:
