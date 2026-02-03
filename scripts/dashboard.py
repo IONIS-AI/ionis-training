@@ -7,9 +7,9 @@ import plotly.express as px
 import numpy as np
 
 # --- BRAIN ARCHITECTURE ---
-class PropagationNet(nn.Module):
+class IONIS_V1(nn.Module):
     def __init__(self):
-        super(PropagationNet, self).__init__()
+        super(IONIS_V1, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(3, 64), nn.ReLU(),
             nn.Linear(64, 128), nn.ReLU(),
@@ -24,13 +24,13 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 
 @st.cache_resource
 def load_model():
-    model = PropagationNet().to(device)
-    model.load_state_dict(torch.load("prophet_v1.pth"))
+    model = IONIS_V1().to(device)
+    model.load_state_dict(torch.load("models/ionis_v1.pth"))
     model.eval()
     return model
 
 st.set_page_config(page_title="Sovereign AI Propagation Dashboard", layout="wide")
-st.title("🛰️ Sovereign AI: Propagation Command")
+st.title("🛰️ IONIS: Propagation Command")
 
 # --- ENHANCED DATA FETCHING ---
 def get_historical_trends():

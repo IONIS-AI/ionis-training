@@ -66,7 +66,7 @@ elif torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
-print(f"Prophet V2.1 ({PHASE}): Using {device}")
+print(f"IONIS V2 ({PHASE}): Using {device}")
 
 
 # --- 2. Model Architecture ---
@@ -85,7 +85,7 @@ class ResidualBlock(nn.Module):
         return torch.relu(x + self.net(x))
 
 
-class ProphetV2(nn.Module):
+class IONIS_V2(nn.Module):
     def __init__(self, input_dim=13, hidden_dim=256):
         super().__init__()
         self.pre = nn.Linear(input_dim, hidden_dim)
@@ -369,7 +369,7 @@ def main():
 
     print(f"\nTrain: {train_size:,}, Validation: {val_size:,}")
 
-    model = ProphetV2(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM).to(device)
+    model = IONIS_V2(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM).to(device)
     params = sum(p.numel() for p in model.parameters())
     print(f"Model: {INPUT_DIM} -> {HIDDEN_DIM} -> 1, {params:,} parameters")
 
@@ -421,7 +421,7 @@ def main():
                 'sample_size': len(dataset),
                 'solar_resolution': SOLAR_RESOLUTION,
                 'phase': PHASE,
-            }, "prophet_v2.pth")
+            }, "models/ionis_v2.pth")
             marker = " *"
 
         print(
@@ -432,7 +432,7 @@ def main():
         )
 
     print(f"\nTraining complete. Best validation RMSE: {np.sqrt(best_val_loss):.2f} dB")
-    print("Model saved as prophet_v2.pth")
+    print("Model saved as models/ionis_v2.pth")
 
 
 if __name__ == "__main__":

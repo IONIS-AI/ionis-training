@@ -19,7 +19,7 @@ class ResidualBlock(nn.Module):
         return torch.relu(x + self.net(x))
 
 
-class ProphetV2(nn.Module):
+class IONIS_V2(nn.Module):
     def __init__(self, input_dim=13, hidden_dim=256):
         super().__init__()
         self.pre = nn.Linear(input_dim, hidden_dim)
@@ -37,10 +37,10 @@ class ProphetV2(nn.Module):
 # --- 2. Load Model ---
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-checkpoint = torch.load("prophet_v2.pth", weights_only=False, map_location=device)
+checkpoint = torch.load("models/ionis_v2.pth", weights_only=False, map_location=device)
 input_dim = checkpoint['input_dim']
 hidden_dim = checkpoint.get('hidden_dim', 256)
-model = ProphetV2(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
+model = IONIS_V2(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
 model.load_state_dict(checkpoint['model_state'])
 model.eval()
 
@@ -126,7 +126,7 @@ def predict(distance_km=REF_DISTANCE, freq_hz=REF_FREQ_HZ, hour=REF_HOUR,
 
 # --- 6. Solar Condition Scenarios ---
 print(f"\n{'='*62}")
-print(f"  Prophet V2.1 - SNR Sensitivity Analysis")
+print(f"  IONIS V2 - SNR Sensitivity Analysis")
 print(f"  Reference path: {TX_GRID} -> {RX_GRID} ({REF_DISTANCE:.0f} km, 20m WSPR)")
 print(f"  Solar feature: SSN (sunspot number)")
 print(f"  New features: ssn_lat_interact, day_night_est")
