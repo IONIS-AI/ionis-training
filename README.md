@@ -1,17 +1,21 @@
-A solid **README** is the difference between a folder full of scripts and a professional research project. It sets the stage for when you eventually push **IONIS** to a public repo or Hugging Face.
-
-Here is a structured `README.md` that documents the architecture, the hardware (M3 Ultra/9975WX), and the physical goals of the Phase 3 Purge.
-
----
-
 ### **IONIS: Ionospheric Neural Inference System**
 
 **Phase 2/3: High-Fidelity Radio Propagation Modeling**
 
 #### **Overview**
 
-IONIS is a deep learning framework designed to predict High-Frequency (HF) radio propagation performance using the WSPR (Weak Signal Propagation Reporter) dataset. By integrating real-time solar indices and geographic path data, IONIS provides a high-resolution estimation of Signal-to-Noise Ratio (SNR) for global transatlantic and trans-equatorial paths.
+IONIS (Ionospheric Neural Inference System) is a deep learning framework designed to predict High-Frequency (HF) radio propagation performance using the WSPR (Weak Signal Propagation Reporter) dataset. By integrating real-time solar indices and geographic path data, IONIS provides a high-resolution estimation of Signal-to-Noise Ratio (SNR) for global transatlantic and trans-equatorial paths.
 
+```
+Pedigree of this model:
+Attribute	        Formal Value
+Model ID	        IONIS-V2-P3
+Architecture	    Multilayer Perceptron (MLP) / PyTorch 2.x
+Training Hardware	Apple M3 Ultra (76-core GPU / 96GB Unified Memory)
+Data Engine	        ClickHouse @ AMD Threadripper 9975WX
+Feature Set	        13-D (Includes Solar-Hour, SSN-Lat, and Day/Night Est)
+Constraint	        Physically Informed (Phase 3 SNR-filtered)
+```
 #### **Technical Architecture**
 
 * **Core Model:** Residual Neural Network (ResNet-style)
@@ -20,7 +24,6 @@ IONIS is a deep learning framework designed to predict High-Frequency (HF) radio
 * **Hidden Layers:** 256-unit width with Dropout and Batch Normalization.
 * **Hardware Stack:** * **Inference/Training:** Apple M3 Ultra (96GB Unified Memory) via Metal Performance Shaders (MPS).
 * **Data Engine:** AMD Threadripper 9975WX feeding a ClickHouse OLAP database.
-
 
 
 #### **Features (V2.1 "Clean" Specs)**
@@ -32,7 +35,6 @@ IONIS uses a 13-feature vector to resolve the complex relationship between the S
 * **Solar:** `ssn` (Sunspot Number)
 * **Engineered:** * `ssn_lat_interact`: Resolves how solar activity affects different latitudinal zones.
 * `day_night_est`: A local solar-hour approximation for D-layer absorption modeling.
-
 
 > **Note on Raw Data Quality:** IONIS is intentionally developed using "Field-Observed" WSPR data. Previous iterations identified a ~14% artifact rate where actual frequency values (Hz/MHz) leaked into the Band ID column. Phase 3 implements strict range-bound filtering to mitigate these artifacts while maintaining the "noisy" reality of a global distributed sensor network.
 
