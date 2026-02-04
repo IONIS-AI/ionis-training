@@ -37,7 +37,7 @@ class IONIS_V2(nn.Module):
 # --- 2. Load Model ---
 device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-checkpoint = torch.load("models/ionis_v2.pth", weights_only=False, map_location=device)
+checkpoint = torch.load("models/ionis_v2_solar.pth", weights_only=False, map_location=device)
 input_dim = checkpoint['input_dim']
 hidden_dim = checkpoint.get('hidden_dim', 256)
 model = IONIS_V2(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
@@ -77,13 +77,17 @@ REF_HOUR = 12
 REF_MONTH = 6           # June (summer)
 
 
-# --- 5. Helper (13-feature model) ---
+# --- 5. Helper (15-feature model) ---
 # Feature order: distance, freq_log, hour_sin, hour_cos,
 #   ssn, az_sin, az_cos, lat_diff, midpoint_lat,
-#   season_sin, season_cos, ssn_lat_interact, day_night_est
+#   season_sin, season_cos, ssn_lat_interact, day_night_est,
+#   prop_quality, band_sfi_interact
+REF_SFI = 150.0    # moderate solar flux (F10.7)
+REF_KP = 2.0       # quiet geomagnetic conditions
+
 def make_input(distance_km, freq_hz, hour, month, azimuth,
-               tx_lat, tx_lon, rx_lat, rx_lon, ssn):
-    """Build normalized 13-feature vector from human-readable values."""
+               tx_lat, tx_lon, rx_lat, rx_lon, ssn, sfi, kp):
+    """Build normalized 15-feature vector from human-readable values."""
     distance = distance_km / 20000.0
     freq_log = np.log10(freq_hz) / 8.0
     hour_sin = np.sin(2.0 * np.pi * hour / 24.0)
@@ -102,12 +106,19 @@ def make_input(distance_km, freq_hz, hour, month, azimuth,
     local_solar_hour = hour + midpoint_lon / 15.0
     day_night_est = np.cos(2.0 * np.pi * local_solar_hour / 24.0)
 
+    # Phase 5: Solar fidelity features
+    sfi_norm = sfi / 300.0
+    kp_norm = kp / 9.0
+    prop_quality = sfi_norm * (1.0 - kp_norm)
+    band_sfi_interact = sfi_norm * freq_log
+
     return torch.tensor(
         [[distance, freq_log, hour_sin, hour_cos,
           ssn_norm,
           az_sin, az_cos, lat_diff, midpoint_lat,
           season_sin, season_cos,
-          ssn_lat_interact, day_night_est]],
+          ssn_lat_interact, day_night_est,
+          prop_quality, band_sfi_interact]],
         dtype=torch.float32,
         device=device,
     )
@@ -116,20 +127,21 @@ def make_input(distance_km, freq_hz, hour, month, azimuth,
 def predict(distance_km=REF_DISTANCE, freq_hz=REF_FREQ_HZ, hour=REF_HOUR,
             month=REF_MONTH, azimuth=REF_AZIMUTH,
             tx_lat=TX_LAT, tx_lon=TX_LON, rx_lat=RX_LAT, rx_lon=RX_LON,
-            ssn=100.0):
+            ssn=100.0, sfi=REF_SFI, kp=REF_KP):
     """Run a single prediction and return SNR in dB."""
     inputs = make_input(distance_km, freq_hz, hour, month, azimuth,
-                        tx_lat, tx_lon, rx_lat, rx_lon, ssn)
+                        tx_lat, tx_lon, rx_lat, rx_lon, ssn, sfi, kp)
     with torch.no_grad():
         return model(inputs).item()
 
 
 # --- 6. Solar Condition Scenarios ---
 print(f"\n{'='*62}")
-print(f"  IONIS V2 - SNR Sensitivity Analysis")
+print(f"  IONIS V2 - SNR Sensitivity Analysis (Phase 5)")
 print(f"  Reference path: {TX_GRID} -> {RX_GRID} ({REF_DISTANCE:.0f} km, 20m WSPR)")
-print(f"  Solar feature: SSN (sunspot number)")
-print(f"  New features: ssn_lat_interact, day_night_est")
+print(f"  Solar features: SSN, SFI (F10.7), Kp (3-hourly)")
+print(f"  New features: prop_quality, band_sfi_interact")
+print(f"  Reference SFI={REF_SFI}, Kp={REF_KP}")
 print(f"{'='*62}")
 
 scenarios = {
@@ -260,5 +272,37 @@ for hour in [0, 3, 6, 9, 12, 15, 18, 21]:
     snr = predict(hour=hour, ssn=100)
     print(f"  {hour:02d}:00 UTC  ->  {snr:+6.1f} dB")
 
+
+# --- 13. SFI (Solar Flux) Sweep ---
+print(f"\n{'='*62}")
+print(f"  SFI (F10.7) Sweep ({TX_GRID}->{RX_GRID}, SSN=100, Kp=2)")
+print(f"  {'-'*56}")
+for sfi_val in [60, 80, 100, 120, 150, 180, 200, 250, 300]:
+    snr = predict(ssn=100, sfi=float(sfi_val), kp=2.0)
+    print(f"  SFI {sfi_val:3d}  ->  {snr:+6.1f} dB")
+
+# --- 14. Kp (Geomagnetic) Sweep ---
+print(f"\n{'='*62}")
+print(f"  Kp Sweep ({TX_GRID}->{RX_GRID}, SSN=100, SFI=150)")
+print(f"  {'-'*56}")
+for kp_val in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
+    snr = predict(ssn=100, sfi=150.0, kp=float(kp_val))
+    print(f"  Kp {kp_val}  ->  {snr:+6.1f} dB")
+
+# --- 15. Propagation Quality Matrix (SFI x Kp) ---
+print(f"\n{'='*62}")
+print(f"  Prop Quality Matrix ({TX_GRID}->{RX_GRID}, SSN=100, 20m)")
+print(f"  {'-'*56}")
+kp_header = f"  {'SFI\\Kp':<10s}"
+for kp_val in [0, 2, 4, 6, 8]:
+    kp_header += f"  Kp={kp_val:d}  "
+print(kp_header)
+print(f"  {'-'*56}")
+for sfi_val in [80, 120, 150, 200, 250]:
+    row = f"  SFI {sfi_val:<5d}"
+    for kp_val in [0, 2, 4, 6, 8]:
+        snr = predict(ssn=100, sfi=float(sfi_val), kp=float(kp_val))
+        row += f"  {snr:+6.1f} "
+    print(row)
 
 print(f"\n{'='*62}")
