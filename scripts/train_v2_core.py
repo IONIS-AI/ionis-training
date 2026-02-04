@@ -13,6 +13,9 @@ Phase 5.2 changes from Phase 5:
     ADDED:   sfi_dist_interact (SFI × log10(distance), pre-computed in CH)
     ADDED:   WeightedRandomSampler using IFW sampling_weight column
 
+Architecture: 17 → 512 → 256 → 128 → 1 (Mish + BatchNorm)
+Data source:  wspr.training_continuous (1M rows × 10 bands, IFW-weighted)
+
 Usage:
     python train_v2_core.py
     CH_HOST=10.0.0.1 python train_v2_core.py
@@ -46,16 +49,9 @@ CH_CONNECT_TIMEOUT = 30
 CH_QUERY_TIMEOUT = 600       # 10 min for large per-band queries
 MAX_RETRIES = 3
 
-# ClickHouse server-side memory settings for training sessions
-# Note: 80G = ~74.5 GiB which the server accepts. Dense bands (40m, 20m)
-# require ORDER BY over hundreds of millions of joined rows before LIMIT
-# kicks in — external sort spills that to NVMe instead of RAM.
+# ClickHouse settings — lightweight since we read from a pre-materialized table
 CH_SETTINGS = {
     'max_block_size': 524_288,                       # 512k rows per streamed block
-    'max_bytes_before_external_group_by': 20_000_000_000,  # 20G — spill GROUP BY to NVMe
-    'max_bytes_before_external_sort': 10_000_000_000,      # 10G — spill ORDER BY to NVMe
-    'max_memory_usage': 80_000_000_000,              # 80G (~74.5 GiB)
-    'max_threads': 16,                               # limit scan parallelism per query
 }
 
 BATCH_SIZE = 4096            # PyTorch training mini-batch
@@ -66,17 +62,16 @@ SAMPLE_SIZE = 10_000_000     # Pilot: 10M rows
 VAL_SPLIT = 0.2
 
 INPUT_DIM = 17
-HIDDEN_DIM = 256
+HIDDEN_DIMS = [512, 256, 128]   # Mish MLP architecture
 DATE_START = '2020-01-01'
 DATE_END = '2026-02-04'
 
 MODEL_DIR = 'models'
 MODEL_FILE = 'ionis_v2_continuous.pth'
-PHASE = 'Phase 5.2: Continuous Weighting (17 features, IFW sampling)'
+PHASE = 'Phase 5.2: Continuous IFW + Mish MLP (17→512→256→128→1)'
 
 # Band IDs after Clean Slate re-ingest (v2.1.0, ADIF standard)
 HF_BANDS = list(range(102, 112))  # 102=160m through 111=10m
-ROWS_PER_BAND = SAMPLE_SIZE // len(HF_BANDS)  # 1M per band
 
 BAND_TO_HZ = {
     102:  1_836_600,   # 160m
@@ -117,42 +112,44 @@ log = logging.getLogger('ionis-v2')
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 2. Model Architecture — ResNet-style regression (~268k params)
+# 2. Model Architecture — Mish MLP (17 → 512 → 256 → 128 → 1)
 # ═══════════════════════════════════════════════════════════════════
 
-class ResidualBlock(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, dim),
-            nn.BatchNorm1d(dim),
-            nn.ReLU(),
-            nn.Linear(dim, dim),
-            nn.BatchNorm1d(dim),
-        )
-
+class Mish(nn.Module):
+    """Mish activation: x * tanh(softplus(x)).
+    Smoother, non-monotonic gradient for better solar cycle learning."""
     def forward(self, x):
-        return torch.relu(x + self.net(x))
+        return x * torch.tanh(nn.functional.softplus(x))
 
 
 class IONIS_V2(nn.Module):
-    """Residual Neural Network for SNR regression.
+    """Multi-layer perceptron with Mish activation and BatchNorm.
 
-    Architecture: Linear → ReLU → ResBlock × 2 → Linear(1)
-    Parameters:   ~270,337 (input=17, hidden=256)
+    Architecture: 17 → 512 → 256 → 128 → 1
+    Activation:   Mish (x·tanh(softplus(x)))
+    Regularization: BatchNorm between each layer
     """
-    def __init__(self, input_dim=17, hidden_dim=256):
+    def __init__(self, input_dim=17, hidden_dims=None):
         super().__init__()
-        self.pre = nn.Linear(input_dim, hidden_dim)
-        self.res1 = ResidualBlock(hidden_dim)
-        self.res2 = ResidualBlock(hidden_dim)
-        self.post = nn.Linear(hidden_dim, 1)
+        if hidden_dims is None:
+            hidden_dims = [512, 256, 128]
+
+        layers = []
+        prev_dim = input_dim
+        for dim in hidden_dims:
+            layers.extend([
+                nn.Linear(prev_dim, dim),
+                nn.BatchNorm1d(dim),
+                Mish(),
+            ])
+            prev_dim = dim
+
+        self.backbone = nn.Sequential(*layers)
+        self.head = nn.Linear(prev_dim, 1)
 
     def forward(self, x):
-        x = torch.relu(self.pre(x))
-        x = self.res1(x)
-        x = self.res2(x)
-        return self.post(x)
+        x = self.backbone(x)
+        return self.head(x)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -289,7 +286,6 @@ def stream_dataset():
     client = connect_clickhouse()
 
     log.info(f"Reading wspr.training_continuous (pre-materialized, IFW-weighted)")
-    log.info(f"  CH settings: max_memory=80G, max_threads=16")
 
     t0 = time.perf_counter()
     feat_blocks = []
@@ -460,9 +456,11 @@ def main():
     log.info(f"Split: {train_size:,} train / {val_size:,} val (IFW-weighted sampler)")
 
     # ── Model ──
-    model = IONIS_V2(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM).to(DEVICE)
+    model = IONIS_V2(input_dim=INPUT_DIM, hidden_dims=HIDDEN_DIMS).to(DEVICE)
     params = sum(p.numel() for p in model.parameters())
-    log.info(f"Model: {INPUT_DIM} -> {HIDDEN_DIM} -> 1  ({params:,} parameters)")
+    arch_str = ' -> '.join(str(d) for d in [INPUT_DIM] + HIDDEN_DIMS + [1])
+    log.info(f"Model: {arch_str}  ({params:,} parameters)")
+    log.info(f"Activation: Mish | BatchNorm between layers")
 
     optimizer = optim.AdamW(
         model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
@@ -536,7 +534,7 @@ def main():
                 'snr_mean': snr_mean,
                 'snr_std': snr_std,
                 'input_dim': INPUT_DIM,
-                'hidden_dim': HIDDEN_DIM,
+                'hidden_dims': HIDDEN_DIMS,
                 'features': FEATURES,
                 'band_ids': HF_BANDS,
                 'band_to_hz': BAND_TO_HZ,
@@ -546,7 +544,9 @@ def main():
                 'val_pearson': val_pearson,
                 'phase': PHASE,
                 'solar_resolution': '3-hourly Kp, daily SFI/SSN (GFZ Potsdam)',
+                'activation': 'Mish',
                 'sampling': 'IFW (Efraimidis-Spirakis, 2D SSN×lat density)',
+                'data_source': 'wspr.training_continuous (IFW-weighted)',
             }, model_path)
             marker = " *"
 
