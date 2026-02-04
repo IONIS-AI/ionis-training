@@ -1,0 +1,12 @@
+# Training data (large CSV exports from ClickHouse)
+data/
+
+# Python virtual environment
+.venv/
+
+# PyTorch checkpoints (large binary files)
+*.pth
+
+# Python bytecode
+__pycache__/
+*.pyc
