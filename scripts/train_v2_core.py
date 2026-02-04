@@ -2,13 +2,16 @@
 """
 train_v2_core.py — IONIS V2 Oracle: Streaming ClickHouse Training Engine
 
-Phase 5: Solar Fidelity — 15-feature model with SFI + Kp
-Streams wspr.spots_raw + solar.indices_raw (SSN, SFI, 3-hourly Kp) from
-ClickHouse (9975WX) directly to PyTorch tensors. No intermediate files.
+Phase 5.2: Continuous Weighting — 17-feature model with IFW sampling
+Reads pre-materialized wspr.training_continuous (10M rows, IFW-weighted)
+from ClickHouse (9975WX) directly to PyTorch tensors. No intermediate files.
 
-Features 14-15 (new):
-    prop_quality     = SFI_norm × (1 - Kp_norm)   — ionospheric quality
-    band_sfi_interact = SFI_norm × freq_log        — band-dependent SFI effect
+Phase 5.2 changes from Phase 5:
+    DROPPED: prop_quality (collinear SSN-SFI trap)
+    ADDED:   sfi (raw, normalized)
+    ADDED:   kp (raw, normalized)
+    ADDED:   sfi_dist_interact (SFI × log10(distance), pre-computed in CH)
+    ADDED:   WeightedRandomSampler using IFW sampling_weight column
 
 Usage:
     python train_v2_core.py
@@ -29,7 +32,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader, random_split
+from torch.utils.data import TensorDataset, DataLoader, random_split, WeightedRandomSampler
 import clickhouse_connect
 
 
@@ -62,14 +65,14 @@ WEIGHT_DECAY = 1e-4          # AdamW L2 regularization
 SAMPLE_SIZE = 10_000_000     # Pilot: 10M rows
 VAL_SPLIT = 0.2
 
-INPUT_DIM = 15
+INPUT_DIM = 17
 HIDDEN_DIM = 256
 DATE_START = '2020-01-01'
 DATE_END = '2026-02-04'
 
 MODEL_DIR = 'models'
-MODEL_FILE = 'ionis_v2_solar.pth'
-PHASE = 'Phase 5: Solar Fidelity (15 features, SFI + Kp)'
+MODEL_FILE = 'ionis_v2_continuous.pth'
+PHASE = 'Phase 5.2: Continuous Weighting (17 features, IFW sampling)'
 
 # Band IDs after Clean Slate re-ingest (v2.1.0, ADIF standard)
 HF_BANDS = list(range(102, 112))  # 102=160m through 111=10m
@@ -93,7 +96,8 @@ FEATURES = [
     'az_sin', 'az_cos', 'lat_diff', 'midpoint_lat',
     'season_sin', 'season_cos',
     'ssn_lat_interact', 'day_night_est',
-    'prop_quality', 'band_sfi_interact',
+    'sfi', 'kp',
+    'band_sfi_interact', 'sfi_dist_interact',
 ]
 
 # Device selection: MPS (M3 Ultra) > CUDA > CPU
@@ -135,9 +139,9 @@ class IONIS_V2(nn.Module):
     """Residual Neural Network for SNR regression.
 
     Architecture: Linear → ReLU → ResBlock × 2 → Linear(1)
-    Parameters:   ~269,057 (input=15, hidden=256)
+    Parameters:   ~270,337 (input=17, hidden=256)
     """
-    def __init__(self, input_dim=15, hidden_dim=256):
+    def __init__(self, input_dim=17, hidden_dim=256):
         super().__init__()
         self.pre = nn.Linear(input_dim, hidden_dim)
         self.res1 = ResidualBlock(hidden_dim)
@@ -182,7 +186,7 @@ def grid_to_latlon(grids):
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 4. Feature Engineering (15 normalized features)
+# 4. Feature Engineering (17 normalized features)
 # ═══════════════════════════════════════════════════════════════════
 
 def band_to_hz(band_ids):
@@ -193,13 +197,15 @@ def band_to_hz(band_ids):
 
 
 def engineer_features(distance, freq_hz, hour, month, azimuth,
-                      ssn_arr, sfi_arr, kp_arr,
+                      ssn_arr, sfi_arr, kp_arr, sfi_dist_arr,
                       tx_lat, tx_lon, rx_lat, rx_lon):
-    """Compute 15 normalized features from raw columns. Returns (N, 15) float32.
+    """Compute 17 normalized features from raw columns. Returns (N, 17) float32.
 
     Features 1-13:  original IONIS V2 (path geometry, solar, interactions)
-    Feature 14:     prop_quality = SFI_norm × (1 - Kp_norm)
-    Feature 15:     band_sfi_interact = SFI_norm × freq_log
+    Feature 14:     sfi = raw SFI / 300 (replaces prop_quality)
+    Feature 15:     kp = raw Kp / 9
+    Feature 16:     band_sfi_interact = SFI_norm × freq_log
+    Feature 17:     sfi_dist_interact = SFI × log10(distance), normalized
     """
     f_distance     = distance / 20000.0
     f_freq_log     = np.log10(freq_hz.astype(np.float32)) / 8.0
@@ -217,87 +223,37 @@ def engineer_features(distance, freq_hz, hour, month, azimuth,
     local_solar_h  = hour + midpoint_lon / 15.0
     f_daynight     = np.cos(2.0 * np.pi * local_solar_h / 24.0)
 
-    # Phase 5: Solar fidelity features
-    sfi_norm          = sfi_arr / 300.0      # F10.7 solar flux, range ~60-300+
-    kp_norm           = kp_arr / 9.0         # Kp geomagnetic index, range 0-9
-    f_prop_quality    = sfi_norm * (1.0 - kp_norm)    # high SFI + low Kp = good prop
-    f_band_sfi        = sfi_norm * f_freq_log          # SFI effect varies by band
+    # Phase 5.2: Raw solar features — network learns interactions
+    f_sfi          = sfi_arr / 300.0          # F10.7 solar flux, range ~60-300+
+    f_kp           = kp_arr / 9.0             # Kp geomagnetic index, range 0-9
+    f_band_sfi     = f_sfi * f_freq_log       # SFI effect varies by band
+    f_sfi_dist     = sfi_dist_arr / (300.0 * np.log10(18000.0))  # normalized
 
     return np.column_stack([
         f_distance, f_freq_log, f_hour_sin, f_hour_cos, f_ssn,
         f_az_sin, f_az_cos, f_lat_diff, f_midpoint_lat,
         f_season_sin, f_season_cos, f_ssn_lat, f_daynight,
-        f_prop_quality, f_band_sfi,
+        f_sfi, f_kp, f_band_sfi, f_sfi_dist,
     ]).astype(np.float32)
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 5. Streaming Data Ingestion
+# 5. Materialized Table Ingestion (Phase 5.2)
 # ═══════════════════════════════════════════════════════════════════
 
-def build_band_query(band_id):
-    """Build a single-band sampling query with 3-hourly Kp + daily SFI/SSN.
+def build_continuous_query():
+    """Single query to read pre-materialized IFW-weighted training table.
 
-    The JOIN uses intDiv(toHour, 3) to align WSPR spots with the matching
-    3-hour Kp bucket from solar.indices_raw (GFZ Potsdam format).
-    SSN and SFI are daily values replicated across all 8 buckets.
+    wspr.training_continuous is populated on the 9975WX with
+    Efraimidis-Spirakis weighted sampling against a 2D (SSN, lat)
+    density histogram. 10M rows, 1M per band, no discrete SSN bins.
     """
-    return f"""
-        SELECT s.snr, s.distance, s.band,
-               toHour(s.timestamp) AS hour, toMonth(s.timestamp) AS month,
-               s.azimuth,
-               toString(s.grid) AS grid,
-               toString(s.reporter_grid) AS reporter_grid,
-               sol.ssn, sol.sfi, sol.kp
-        FROM wspr.spots_raw s
-        INNER JOIN (
-            SELECT date,
-                   intDiv(toHour(time), 3) AS bucket,
-                   max(ssn) AS ssn,
-                   max(observed_flux) AS sfi,
-                   max(kp_index) AS kp
-            FROM solar.indices_raw FINAL
-            GROUP BY date, bucket
-            HAVING ssn > 0
-        ) sol ON toDate(s.timestamp) = sol.date
-             AND intDiv(toHour(s.timestamp), 3) = sol.bucket
-        WHERE s.band = {band_id}
-          AND s.timestamp >= '{DATE_START}' AND s.timestamp < '{DATE_END}'
-          AND s.snr BETWEEN -35 AND 25
-          AND s.distance BETWEEN 500 AND 18000
-          AND length(s.grid) >= 4 AND length(s.reporter_grid) >= 4
-        ORDER BY cityHash64(toString(s.timestamp))
-        LIMIT {ROWS_PER_BAND}
-    """
-
-
-def build_fallback_query():
-    """Non-stratified fallback query with 3-hourly Kp + daily SFI/SSN."""
-    band_list = ','.join(str(b) for b in HF_BANDS)
-    return f"""
-        WITH solar_bucketed AS (
-            SELECT date,
-                   intDiv(toHour(time), 3) AS bucket,
-                   max(ssn) AS ssn,
-                   max(observed_flux) AS sfi,
-                   max(kp_index) AS kp
-            FROM solar.indices_raw FINAL
-            GROUP BY date, bucket
-            HAVING ssn > 0
-        )
-        SELECT s.snr, s.distance, s.band,
-               toHour(s.timestamp), toMonth(s.timestamp), s.azimuth,
-               toString(s.grid), toString(s.reporter_grid),
-               sol.ssn, sol.sfi, sol.kp
-        FROM wspr.spots_raw s
-        INNER JOIN solar_bucketed sol ON toDate(s.timestamp) = sol.date
-             AND intDiv(toHour(s.timestamp), 3) = sol.bucket
-        WHERE s.timestamp >= '{DATE_START}' AND s.timestamp < '{DATE_END}'
-          AND s.snr BETWEEN -35 AND 25
-          AND s.band IN ({band_list})
-          AND s.distance BETWEEN 500 AND 18000
-          AND length(s.grid) >= 4 AND length(s.reporter_grid) >= 4
-        LIMIT {SAMPLE_SIZE}
+    return """
+        SELECT snr, distance, band, hour, month, azimuth,
+               tx_grid, rx_grid, ssn, sfi, kp,
+               midpoint_lat, sampling_weight, sfi_dist_interact
+        FROM wspr.training_continuous
+        ORDER BY cityHash64(tx_grid, rx_grid, toString(snr))
     """
 
 
@@ -324,148 +280,96 @@ def connect_clickhouse():
             time.sleep(2 ** attempt)
 
 
-def process_raw_columns(snr, distance, band_id, hour, month,
-                        azimuth, raw_tx, raw_rx, ssn_arr, sfi_arr, kp_arr):
-    """Convert raw ClickHouse columns → (features, targets) numpy arrays."""
-    freq_hz = band_to_hz(band_id)
-    tx_grids = clean_grids(raw_tx)
-    rx_grids = clean_grids(raw_rx)
-    tx_lat, tx_lon = grid_to_latlon(tx_grids)
-    rx_lat, rx_lon = grid_to_latlon(rx_grids)
-    feats = engineer_features(
-        distance, freq_hz, hour, month, azimuth,
-        ssn_arr, sfi_arr, kp_arr, tx_lat, tx_lon, rx_lat, rx_lon,
-    )
-    return feats, snr
-
-
 def stream_dataset():
-    """Sequential per-band ingestion from ClickHouse → (X, y) tensors.
+    """Read pre-materialized wspr.training_continuous → (X, y, weights) tensors.
 
-    Queries one band at a time (102, 103, ..., 111) so ClickHouse only
-    sorts and streams 1M rows per query instead of 10M in a single
-    UNION ALL. Results are concatenated on the M3 Ultra (96 GB unified).
+    Single query reads all 10M rows. Feature engineering runs in Python.
+    Returns sampling_weight array for WeightedRandomSampler.
     """
     client = connect_clickhouse()
-    band_range = f"{HF_BANDS[0]}-{HF_BANDS[-1]}"
 
-    log.info(f"Sequential sampling {DATE_START} to {DATE_END}, HF bands {band_range}")
-    log.info(f"  {ROWS_PER_BAND:,}/band x {len(HF_BANDS)} bands = {SAMPLE_SIZE:,}")
-    log.info(f"  CH settings: external_group_by=20G, max_memory=80G, max_threads=16")
+    log.info(f"Reading wspr.training_continuous (pre-materialized, IFW-weighted)")
+    log.info(f"  CH settings: max_memory=80G, max_threads=16")
 
     t0 = time.perf_counter()
     feat_blocks = []
     tgt_blocks = []
+    weight_blocks = []
     band_counts = {}
     ssn_accum = []
     snr_accum = []
     total_rows = 0
 
-    for band_idx, bid in enumerate(HF_BANDS, 1):
-        hz = BAND_TO_HZ.get(bid, 0)
-        label = f"{hz / 1e6:.3f}MHz" if hz else f"band={bid}"
-        log.info(f"  Band {bid} ({label}) [{band_idx}/{len(HF_BANDS)}]...")
+    query = build_continuous_query()
 
-        query = build_band_query(bid)
-        t_band = time.perf_counter()
-        band_rows = 0
+    try:
+        with client.query_column_block_stream(
+            query, settings=CH_SETTINGS,
+        ) as stream:
+            for block in stream:
+                snr        = np.asarray(block[0], dtype=np.float32)
+                distance   = np.asarray(block[1], dtype=np.float32)
+                band_id    = np.asarray(block[2], dtype=np.int32)
+                hour       = np.asarray(block[3], dtype=np.float32)
+                month      = np.asarray(block[4], dtype=np.float32)
+                azimuth    = np.asarray(block[5], dtype=np.float32)
+                raw_tx     = list(block[6])
+                raw_rx     = list(block[7])
+                ssn_arr    = np.asarray(block[8], dtype=np.float32)
+                sfi_arr    = np.asarray(block[9], dtype=np.float32)
+                kp_arr     = np.asarray(block[10], dtype=np.float32)
+                # block[11] = midpoint_lat (used for verification, not features)
+                weights    = np.asarray(block[12], dtype=np.float64)
+                sfi_dist   = np.asarray(block[13], dtype=np.float32)
 
-        try:
-            with client.query_column_block_stream(
-                query, settings=CH_SETTINGS,
-            ) as stream:
-                for block in stream:
-                    snr      = np.asarray(block[0], dtype=np.float32)
-                    distance = np.asarray(block[1], dtype=np.float32)
-                    band_id  = np.asarray(block[2], dtype=np.int32)
-                    hour     = np.asarray(block[3], dtype=np.float32)
-                    month    = np.asarray(block[4], dtype=np.float32)
-                    azimuth  = np.asarray(block[5], dtype=np.float32)
-                    raw_tx   = list(block[6])
-                    raw_rx   = list(block[7])
-                    ssn_arr  = np.asarray(block[8], dtype=np.float32)
-                    sfi_arr  = np.asarray(block[9], dtype=np.float32)
-                    kp_arr   = np.asarray(block[10], dtype=np.float32)
+                n = len(snr)
+                total_rows += n
 
-                    n = len(snr)
-                    band_rows += n
-                    total_rows += n
+                ssn_accum.append(ssn_arr)
+                snr_accum.append(snr)
+                weight_blocks.append(weights)
 
-                    ssn_accum.append(ssn_arr)
-                    snr_accum.append(snr)
+                # Count per band
+                for b in np.unique(band_id):
+                    band_counts[int(b)] = band_counts.get(int(b), 0) + int(np.sum(band_id == b))
 
-                    feats, tgts = process_raw_columns(
-                        snr, distance, band_id, hour, month,
-                        azimuth, raw_tx, raw_rx, ssn_arr, sfi_arr, kp_arr,
-                    )
-                    feat_blocks.append(feats)
-                    tgt_blocks.append(tgts)
+                # Feature engineering
+                freq_hz = band_to_hz(band_id)
+                tx_grids = clean_grids(raw_tx)
+                rx_grids = clean_grids(raw_rx)
+                tx_lat, tx_lon = grid_to_latlon(tx_grids)
+                rx_lat, rx_lon = grid_to_latlon(rx_grids)
 
-        except Exception as e:
-            log.warning(f"    Band {bid} stream error after {band_rows:,} rows: {e}")
-            if total_rows == 0:
-                raise
+                feats = engineer_features(
+                    distance, freq_hz, hour, month, azimuth,
+                    ssn_arr, sfi_arr, kp_arr, sfi_dist,
+                    tx_lat, tx_lon, rx_lat, rx_lon,
+                )
+                feat_blocks.append(feats)
+                tgt_blocks.append(snr)
 
-        band_sec = time.perf_counter() - t_band
-        band_rps = band_rows / band_sec if band_sec > 0 else 0
-        band_counts[bid] = band_rows
-        log.info(
-            f"    {band_rows:>10,} rows in {band_sec:5.1f}s "
-            f"({band_rps:,.0f} rows/sec) | cumulative: {total_rows:,}"
-        )
+    except Exception as e:
+        log.warning(f"Stream error after {total_rows:,} rows: {e}")
+        if total_rows == 0:
+            raise
 
     elapsed = time.perf_counter() - t0
     rps = total_rows / elapsed if elapsed > 0 else 0
     log.info(f"Ingestion complete: {total_rows:,} rows in {elapsed:.1f}s ({rps:,.0f} rows/sec)")
 
     if total_rows == 0:
-        raise RuntimeError("No rows ingested — check ClickHouse filters and solar data")
+        raise RuntimeError("No rows ingested — check wspr.training_continuous")
 
     X_np = np.concatenate(feat_blocks, axis=0)
     y_np = np.concatenate(tgt_blocks, axis=0)
     ssn_all = np.concatenate(ssn_accum, axis=0)
     snr_all = np.concatenate(snr_accum, axis=0)
+    weight_all = np.concatenate(weight_blocks, axis=0)
 
     X = torch.tensor(X_np, dtype=torch.float32)
     y = torch.tensor(y_np, dtype=torch.float32).unsqueeze(1)
 
-    return (X, y), band_counts, ssn_all, snr_all
-
-
-def _fallback_ingest(client):
-    """Non-streamed fallback if column block stream fails."""
-    query = build_fallback_query()
-    log.info("Running fallback query (non-streamed)...")
-    t0 = time.perf_counter()
-    result = client.query(query, settings=CH_SETTINGS)
-    rows = result.result_rows
-    elapsed = time.perf_counter() - t0
-    n = len(rows)
-    log.info(f"Fallback: {n:,} rows in {elapsed:.1f}s")
-
-    if n == 0:
-        raise RuntimeError("Fallback query returned 0 rows")
-
-    cols = list(zip(*rows))
-    snr      = np.array(cols[0], dtype=np.float32)
-    distance = np.array(cols[1], dtype=np.float32)
-    band_id  = np.array(cols[2], dtype=np.int32)
-    hour     = np.array(cols[3], dtype=np.float32)
-    month    = np.array(cols[4], dtype=np.float32)
-    azimuth  = np.array(cols[5], dtype=np.float32)
-    raw_tx   = list(cols[6])
-    raw_rx   = list(cols[7])
-    ssn_arr  = np.array(cols[8], dtype=np.float32)
-    sfi_arr  = np.array(cols[9], dtype=np.float32)
-    kp_arr   = np.array(cols[10], dtype=np.float32)
-
-    feats, tgts = process_raw_columns(
-        snr, distance, band_id, hour, month,
-        azimuth, raw_tx, raw_rx, ssn_arr, sfi_arr, kp_arr,
-    )
-    X = torch.tensor(feats, dtype=torch.float32)
-    y = torch.tensor(tgts, dtype=torch.float32).unsqueeze(1)
-    return X, y
+    return (X, y), band_counts, ssn_all, snr_all, weight_all
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -506,7 +410,7 @@ def print_diagnostics(X, y, band_counts, ssn_all, snr_all):
 
     # Per-band row counts
     if band_counts:
-        log.info("Per-band row counts (stratified):")
+        log.info("Per-band row counts:")
         for bid in sorted(band_counts):
             hz = BAND_TO_HZ.get(bid, 0)
             label = f"{hz / 1e6:.3f}MHz" if hz else f"band={bid}"
@@ -531,8 +435,8 @@ def main():
     log.info(f"Device: {DEVICE} | Epochs: {EPOCHS} | Batch: {BATCH_SIZE}")
     log.info(f"Optimizer: AdamW (lr={LEARNING_RATE}, wd={WEIGHT_DECAY})")
 
-    # ── Stream data from ClickHouse ──
-    (X, y), band_counts, ssn_all, snr_all = stream_dataset()
+    # ── Read pre-materialized data from ClickHouse ──
+    (X, y), band_counts, ssn_all, snr_all, weight_all = stream_dataset()
     snr_mean, snr_std = print_diagnostics(X, y, band_counts, ssn_all, snr_all)
     n = len(X)
 
@@ -542,9 +446,18 @@ def main():
     train_size = n - val_size
     train_set, val_set = random_split(dataset, [train_size, val_size])
 
-    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, shuffle=True)
+    # IFW sampling: WeightedRandomSampler uses the density-based weights
+    # so rare (SSN, lat) combinations are seen more frequently per epoch.
+    train_indices = train_set.indices
+    train_weights = torch.tensor(weight_all[train_indices], dtype=torch.float64)
+    sampler = WeightedRandomSampler(
+        weights=train_weights,
+        num_samples=train_size,
+        replacement=True,
+    )
+    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE, sampler=sampler)
     val_loader = DataLoader(val_set, batch_size=BATCH_SIZE, shuffle=False)
-    log.info(f"Split: {train_size:,} train / {val_size:,} val")
+    log.info(f"Split: {train_size:,} train / {val_size:,} val (IFW-weighted sampler)")
 
     # ── Model ──
     model = IONIS_V2(input_dim=INPUT_DIM, hidden_dim=HIDDEN_DIM).to(DEVICE)
@@ -633,6 +546,7 @@ def main():
                 'val_pearson': val_pearson,
                 'phase': PHASE,
                 'solar_resolution': '3-hourly Kp, daily SFI/SSN (GFZ Potsdam)',
+                'sampling': 'IFW (Efraimidis-Spirakis, 2D SSN×lat density)',
             }, model_path)
             marker = " *"
 
