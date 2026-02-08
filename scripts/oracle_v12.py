@@ -612,12 +612,12 @@ ROBUSTNESS_TESTS = [
      "params": {"lat_tx": 39.14, "lon_tx": -77.01, "lat_rx": 51.50, "lon_rx": -0.12,
                 "freq_mhz": 14.0, "sfi": 150, "kp": 9, "hour": 14}},
 
-    # TST-506: Checkpoint integrity
+    # TST-506: Checkpoint integrity (updated 2026-02-08 Platinum Burn)
     {"name": "Checkpoint RMSE", "test": "checkpoint_rmse",
-     "expected": 2.0478, "tolerance": 0.01},
+     "expected": 2.0336, "tolerance": 0.01},
 
     {"name": "Checkpoint Pearson", "test": "checkpoint_pearson",
-     "expected": 0.3051, "tolerance": 0.01},
+     "expected": 0.3153, "tolerance": 0.01},
 
     # TST-701: Geographic bias — compare dense vs sparse regions
     {"name": "Geo bias: EU vs Africa", "test": "geo_bias"},
