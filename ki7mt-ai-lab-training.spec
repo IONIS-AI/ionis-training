@@ -50,13 +50,13 @@ install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
 %{_datadir}/%{name}/Modelfile
 
 %changelog
-* Fri Feb 07 2026 Greg Beam <ki7mt@yahoo.com> - 2.3.0-1
+* Sat Feb 07 2026 Greg Beam <ki7mt@yahoo.com> - 2.3.0-1
 - Align version across all lab packages at 2.3.0
 
-* Tue Feb 04 2026 Greg Beam <ki7mt@yahoo.com> - 2.2.0-1
+* Wed Feb 04 2026 Greg Beam <ki7mt@yahoo.com> - 2.2.0-1
 - Align version across all lab packages at 2.2.0 for Phase 4.1
 
-* Mon Feb 03 2026 Greg Beam <ki7mt@yahoo.com> - 2.1.0-1
+* Tue Feb 03 2026 Greg Beam <ki7mt@yahoo.com> - 2.1.0-1
 - Initial packaging for COPR
 - IONIS V2 training scripts and sensitivity analysis
 - Align version across all lab packages at 2.1.0
