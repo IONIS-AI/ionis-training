@@ -16,11 +16,13 @@ Usage:
 import argparse
 import json
 import math
-import subprocess
+import os
 import sys
 import time
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
+
+import clickhouse_connect
 
 
 # ── Band Mapping ─────────────────────────────────────────────────────────────
@@ -128,22 +130,26 @@ class SignatureSearch:
     ]
     CONDITION_CLOSED = "CLOSED"
 
-    def __init__(self, host: str = "localhost", port: int = 9000):
-        self.host = host
-        self.port = port
+    def __init__(self, host: str = None, port: int = None):
+        # Default to DAC link
+        self.host = host or os.environ.get("CH_HOST", "10.60.1.1")
+        self.port = port or int(os.environ.get("CH_PORT", "8123"))
+        self._client = None
 
-    def _run_query(self, sql: str) -> str:
-        """Execute SQL via clickhouse-client and return TSV output."""
-        cmd = [
-            "clickhouse-client",
-            f"--host={self.host}",
-            f"--port={self.port}",
-            "--query", sql,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            raise RuntimeError(f"ClickHouse error: {result.stderr.strip()}")
-        return result.stdout
+    def _get_client(self):
+        """Lazy-initialize ClickHouse client."""
+        if self._client is None:
+            self._client = clickhouse_connect.get_client(
+                host=self.host,
+                port=self.port,
+            )
+        return self._client
+
+    def _run_query(self, sql: str) -> List[tuple]:
+        """Execute SQL via clickhouse_connect and return rows."""
+        client = self._get_client()
+        result = client.query(sql)
+        return result.result_rows
 
     def _classify_condition(self, snr: float) -> str:
         for threshold, label in self.CONDITION_THRESHOLDS:
@@ -260,58 +266,38 @@ LIMIT {k}
 
         t0 = time.monotonic()
 
+        def _parse_row(row):
+            """Parse a query result row into a Neighbor object."""
+            # row is a tuple: (tx_grid, rx_grid, hour, month, median_snr, spot_count,
+            #                  snr_std, reliability, avg_sfi, avg_kp, avg_distance, dist)
+            return Neighbor(
+                tx_grid=str(row[0]).rstrip('\x00'),
+                rx_grid=str(row[1]).rstrip('\x00'),
+                hour=int(row[2]),
+                month=int(row[3]),
+                median_snr=float(row[4]),
+                spot_count=int(row[5]),
+                snr_std=float(row[6]),
+                reliability=float(row[7]),
+                avg_sfi=float(row[8]),
+                avg_kp=float(row[9]),
+                avg_distance=int(row[10]),
+                distance_score=float(row[11]),
+            )
+
         # Try narrow window first
         sql = self._build_sql(tx_grid, rx_grid, band, hour, month, sfi, kp, k)
-        raw = self._run_query(sql)
+        rows = self._run_query(sql)
 
         # Parse results
-        neighbors = []
-        for line in raw.strip().split('\n'):
-            if not line.strip():
-                continue
-            parts = line.split('\t')
-            if len(parts) < 12:
-                continue
-            neighbors.append(Neighbor(
-                tx_grid=parts[0].rstrip('\x00'),
-                rx_grid=parts[1].rstrip('\x00'),
-                hour=int(parts[2]),
-                month=int(parts[3]),
-                median_snr=float(parts[4]),
-                spot_count=int(parts[5]),
-                snr_std=float(parts[6]),
-                reliability=float(parts[7]),
-                avg_sfi=float(parts[8]),
-                avg_kp=float(parts[9]),
-                avg_distance=int(parts[10]),
-                distance_score=float(parts[11]),
-            ))
+        neighbors = [_parse_row(row) for row in rows if len(row) >= 12]
 
         # Auto-widen if zero matches
         if len(neighbors) == 0:
             sql = self._build_sql(tx_grid, rx_grid, band, hour, month, sfi, kp, k,
                                   hour_window=4, month_window=2)
-            raw = self._run_query(sql)
-            for line in raw.strip().split('\n'):
-                if not line.strip():
-                    continue
-                parts = line.split('\t')
-                if len(parts) < 12:
-                    continue
-                neighbors.append(Neighbor(
-                    tx_grid=parts[0].rstrip('\x00'),
-                    rx_grid=parts[1].rstrip('\x00'),
-                    hour=int(parts[2]),
-                    month=int(parts[3]),
-                    median_snr=float(parts[4]),
-                    spot_count=int(parts[5]),
-                    snr_std=float(parts[6]),
-                    reliability=float(parts[7]),
-                    avg_sfi=float(parts[8]),
-                    avg_kp=float(parts[9]),
-                    avg_distance=int(parts[10]),
-                    distance_score=float(parts[11]),
-                ))
+            rows = self._run_query(sql)
+            neighbors = [_parse_row(row) for row in rows if len(row) >= 12]
 
         query_ms = (time.monotonic() - t0) * 1000.0
 
@@ -412,8 +398,9 @@ def print_result(r: SearchResult):
 
 # ── Test Suite ───────────────────────────────────────────────────────────────
 
-def run_tests(host: str = "localhost"):
+def run_tests(host: str = None):
     """Run 7 physics checks."""
+    host = host or os.environ.get("CH_HOST", "10.60.1.1")
     print("=" * 70)
     print("  Signature Search Test Suite (Step G)")
     print("=" * 70)
@@ -562,7 +549,7 @@ def main():
     parser.add_argument("--sfi", type=float, default=150.0, help="Solar Flux Index (default 150)")
     parser.add_argument("--kp", type=float, default=2.0, help="Kp index (default 2)")
     parser.add_argument("--k", type=int, default=50, help="Number of neighbors (default 50)")
-    parser.add_argument("--host", default="localhost", help="ClickHouse host (default localhost)")
+    parser.add_argument("--host", default=None, help="ClickHouse host (default: DAC 10.60.1.1)")
     parser.add_argument("--json", action="store_true", help="JSON output")
     parser.add_argument("--test", action="store_true", help="Run built-in test suite")
 
