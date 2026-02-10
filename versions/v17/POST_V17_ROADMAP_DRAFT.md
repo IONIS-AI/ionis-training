@@ -83,7 +83,9 @@ POST /predict
 **Product Definition**: "Can I work this path right now, on my mode?" One forward pass, six answers.
 
 Mode thresholds (from V16 calibration):
-- WSPR: -28 dB, FT8: -20 dB, CW: -18 dB, RTTY: -5 dB, SSB: +5 dB
+- WSPR: -28 dB, FT8: -20 dB, CW: -10 dB*, RTTY: -5 dB, SSB: +5 dB
+
+*CW threshold note: V16.1 validation uses -18 dB (skimmer sensitivity), but product definition uses -10 dB (human operator threshold). Decide which to expose in API.
 
 **Stack**: FastAPI + ONNX Runtime on 9975WX (RTX PRO 6000 for batch inference)
 
