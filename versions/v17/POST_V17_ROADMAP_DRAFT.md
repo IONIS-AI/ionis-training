@@ -1,6 +1,8 @@
 # Post-V17 Roadmap — DRAFT
 
 > For review by 9975WX and Gemini Pro. Created 2026-02-10 during V17 training.
+>
+> **Rev 2**: Incorporated 9975WX feedback on Kp sign convention, VOACAP, solar indices, grey-line, NVIS.
 
 ## Executive Summary
 
@@ -20,7 +22,9 @@ V16 achieved the D-to-Z goal: outperform VOACAP on standardized tests. V17 adds 
 | RMSE | 0.860σ | ≤ 0.860σ | > 0.90σ |
 | PSK Reporter Recall | 84.14% | ≥ 84% | < 80% |
 | Physics (SFI+) | +0.48σ | +0.4 to +0.9σ | < 0 or > 2.0 |
-| Physics (Kp9-) | +3.45σ | +2.5 to +4.5σ | < 0 |
+| Physics (Kp9-) | -3.45σ | ≤ -2.0σ | > 0 (inverted) |
+
+**Note on Kp9- sign**: Negative value means storms COST SNR (correct physics). Positive would mean storms help propagation, which is inverted/wrong.
 
 ### Validation Tests
 
@@ -69,7 +73,14 @@ POST /predict
 
 **Stack**: FastAPI + ONNX Runtime on 9975WX (RTX PRO 6000 for batch inference)
 
-### 2C. Live Validation Loop
+### 2C. VOACAP Comparison
+
+**Confirmed**: Run `itshfbc` locally on 9975WX.
+- License: GPL (free)
+- Already proven: Step K achieved 2,020 circuits/sec
+- No API needed — batch predict against same paths IONIS sees
+
+### 2D. Live Validation Loop
 
 | Component | Source | Destination | Cadence |
 |-----------|--------|-------------|---------|
@@ -78,6 +89,8 @@ POST /predict
 | IONIS predictions | API | `validation.live_predictions` | Per-spot |
 | VOACAP predictions | itshfbc | `validation.voacap_predictions` | Hourly batch |
 | Comparison metrics | ClickHouse | `validation.daily_summary` | Daily |
+
+**CRITICAL**: Live validation MUST use `wspr.live_conditions` (NOAA SWPC, 15-min updates), NOT `solar.bronze` (GFZ Potsdam, ~1 day lag). This matters during geomagnetic storms when Kp changes rapidly.
 
 **Success Metric**: IONIS Pearson ≥ VOACAP Pearson on rolling 7-day window.
 
@@ -116,18 +129,23 @@ POST /predict
 
 **Recommendation**: Defer unless user demand is clear.
 
-### Option C: Grey-Line Specialization
+### Option C: Grey-Line Specialization (HIGH VALUE)
 
 **Trigger**: V17 still weak on sunrise/sunset predictions.
 
-**Current**: `day_night_est = cos(2π × (hour + midpoint_lon/15) / 24)`
+**Current**: `day_night_est = cos(2π × (hour + midpoint_lon/15) / 24)` — crude approximation.
 
-**Enhancement Options**:
-1. Solar terminator distance (km from grey line)
-2. Minute-level resolution (not just hour)
-3. Explicit sunrise/sunset flags per path
+**Recommended Enhancement**: Solar terminator distance (km from grey line)
+- **Cheap to compute**: Only needs solar declination + hour + path midpoint
+- **High physics value**: Directly models grey-line propagation enhancement
+- **NVIS synergy**: Could help 160m/80m where grey-line effects are strongest
 
-**Implementation**: Add 1-2 features, retrain. Low risk.
+**Implementation**:
+1. Add `terminator_distance_km` feature (signed: negative=night side, positive=day side)
+2. Optionally add `terminator_crossing` flag (does path cross the terminator?)
+3. Retrain — low risk, 1-2 new features
+
+**9975WX Note**: This is a real opportunity. Operators actively exploit grey-line on 160m/80m.
 
 ### Option D: NVIS Gap Remediation
 
@@ -140,8 +158,11 @@ POST /predict
 
 **Remediation Options**:
 1. Upsample 160m/80m in training (balance bands)
-2. Add explicit NVIS flag (distance < 500km + band < 80m)
+2. ~~Add explicit NVIS flag (distance < 500km + band < 80m)~~ — **PROBLEMATIC** (see below)
 3. Separate NVIS model (V18-NVIS)
+4. Grey-line enhancement (Option C) may help indirectly
+
+**9975WX Note on Option 2**: The 500km distance filter is already applied in WSPR signatures to remove ground-wave. The problem is that NVIS paths ARE short distance but ionospheric — they get filtered out along with ground-wave. Distinguishing NVIS from ground-wave requires elevation angle data, which we don't have. This is a fundamental data limitation, not a modeling fix.
 
 ---
 
@@ -177,10 +198,15 @@ POST /predict
 
 ## Open Questions
 
-1. **VOACAP Integration**: Do we run itshfbc locally or use an API? License?
+1. ~~**VOACAP Integration**: Do we run itshfbc locally or use an API? License?~~
+   **ANSWERED**: Local `itshfbc` on 9975WX. GPL licensed. Already proven at 2,020 circuits/sec in Step K.
+
 2. **Alert System**: Who gets notified if IONIS drifts below VOACAP?
+
 3. **User Interface**: CLI only? Web dashboard? Ham radio logger integration?
-4. **Public Release**: Open source the model? API access for others?
+
+4. ~~**Public Release**: Open source the model? API access for others?~~
+   **ANSWERED (9975WX)**: Model weights are small (~800KB). The value is in the data pipeline and training infrastructure, not the checkpoint. Open-sourcing the model is fine; the 13B-row dataset is the moat.
 
 ---
 
@@ -199,4 +225,4 @@ POST /predict
 
 ---
 
-*Draft by Claude-M3, 2026-02-10. Pending review by 9975WX and Gemini Pro.*
+*Draft by Claude-M3, 2026-02-10. Rev 2 incorporates 9975WX feedback. Pending Gemini Pro review.*
