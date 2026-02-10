@@ -68,8 +68,22 @@ POST /predict
   "sfi": 150,
   "kp": 2
 }
-→ {"snr_db": 12.3, "viable": true, "confidence": 0.85}
+→ {
+    "snr_db": 12.3,
+    "modes": {
+      "WSPR": {"viable": true, "margin_db": 40.3},
+      "FT8":  {"viable": true, "margin_db": 32.3},
+      "CW":   {"viable": true, "margin_db": 22.3},
+      "RTTY": {"viable": true, "margin_db": 17.3},
+      "SSB":  {"viable": true, "margin_db": 7.3}
+    }
+  }
 ```
+
+**Product Definition**: "Can I work this path right now, on my mode?" One forward pass, six answers.
+
+Mode thresholds (from V16 calibration):
+- WSPR: -28 dB, FT8: -20 dB, CW: -18 dB, RTTY: -5 dB, SSB: +5 dB
 
 **Stack**: FastAPI + ONNX Runtime on 9975WX (RTX PRO 6000 for batch inference)
 
