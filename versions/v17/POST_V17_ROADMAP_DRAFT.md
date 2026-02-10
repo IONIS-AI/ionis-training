@@ -1,0 +1,202 @@
+# Post-V17 Roadmap — DRAFT
+
+> For review by 9975WX and Gemini Pro. Created 2026-02-10 during V17 training.
+
+## Executive Summary
+
+V16 achieved the D-to-Z goal: outperform VOACAP on standardized tests. V17 adds RBN grid enrichment. This document defines what comes next.
+
+**Key Question**: Is IONIS ready for production, or do we need more training iterations?
+
+---
+
+## Phase 1: V17 Validation (Immediate)
+
+### Success Criteria
+
+| Metric | V16 Baseline | V17 Target | Fail Threshold |
+|--------|--------------|------------|----------------|
+| Pearson | +0.4873 | ≥ +0.48 | < +0.40 |
+| RMSE | 0.860σ | ≤ 0.860σ | > 0.90σ |
+| PSK Reporter Recall | 84.14% | ≥ 84% | < 80% |
+| Physics (SFI+) | +0.48σ | +0.4 to +0.9σ | < 0 or > 2.0 |
+| Physics (Kp9-) | +3.45σ | +2.5 to +4.5σ | < 0 |
+
+### Validation Tests
+
+1. **Oracle Test Suite** (35 tests) — Must pass all
+2. **PSK Reporter Acid Test** — 100K independent spots with real solar
+3. **Step I Recall** — Contest path prediction vs VOACAP
+4. **Band-by-Band Analysis** — Check NVIS gap (160m target: > 50%)
+
+### Decision Gate
+
+| V17 Result | Action |
+|------------|--------|
+| All targets met | → Phase 2 (Production) |
+| Pearson < +0.40 | → Investigate RBN data quality, consider rollback to V16 |
+| NVIS still < 50% | → V18 with NVIS focus before production |
+| Physics inverted | → Debug sidecars, do not deploy |
+
+---
+
+## Phase 2: Production Deployment
+
+### 2A. Model Export Pipeline
+
+| Step | Owner | Deliverable |
+|------|-------|-------------|
+| Freeze checkpoint | M3 | `ionis_v17_production.pth` |
+| ONNX export | M3 | `ionis_v17.onnx` |
+| Validate ONNX | M3 | Numerical equivalence test |
+| Deploy to 9975WX | 9975 | ONNX Runtime + FastAPI |
+
+### 2B. Prediction API
+
+```
+POST /predict
+{
+  "tx_grid": "FN31",
+  "rx_grid": "JO22",
+  "band": 107,
+  "hour_utc": 14,
+  "month": 2,
+  "sfi": 150,
+  "kp": 2
+}
+→ {"snr_db": 12.3, "viable": true, "confidence": 0.85}
+```
+
+**Stack**: FastAPI + ONNX Runtime on 9975WX (RTX PRO 6000 for batch inference)
+
+### 2C. Live Validation Loop
+
+| Component | Source | Destination | Cadence |
+|-----------|--------|-------------|---------|
+| PSK Reporter spots | MQTT collector | `pskr.bronze` | Real-time |
+| Solar indices | `wspr.live_conditions` | API | 15-min |
+| IONIS predictions | API | `validation.live_predictions` | Per-spot |
+| VOACAP predictions | itshfbc | `validation.voacap_predictions` | Hourly batch |
+| Comparison metrics | ClickHouse | `validation.daily_summary` | Daily |
+
+**Success Metric**: IONIS Pearson ≥ VOACAP Pearson on rolling 7-day window.
+
+---
+
+## Phase 3: V18 Decision Tree
+
+### Option A: PSK Firehose (Real-Time Training)
+
+**Trigger**: V17 production stable for 30 days, want "live state" not just climatology.
+
+| Pros | Cons |
+|------|------|
+| 26M spots/day, fresh data | Training/inference drift risk |
+| FT8 dominates (88%) — mode gap | Requires continuous retraining infra |
+| Real solar conditions | Storage: ~10GB/day raw |
+
+**Implementation**:
+1. Ingest `pskr.bronze` → `pskr.signatures` (same schema as others)
+2. Rolling 90-day training window
+3. Weekly model refresh, A/B validation before promotion
+
+### Option B: Power-Level Normalization
+
+**Trigger**: Users ask "what SNR at my power level?"
+
+| Data Source | TX Power | Notes |
+|-------------|----------|-------|
+| WSPR | 5W fixed | QRP baseline |
+| Contest SSB | 100-1500W | High power ceiling |
+| RBN | Unknown | Varied, no metadata |
+
+**Challenge**: RBN doesn't carry power level. Would need to:
+- Use contest logs only for power modeling
+- Or infer power from SNR distribution (risky)
+
+**Recommendation**: Defer unless user demand is clear.
+
+### Option C: Grey-Line Specialization
+
+**Trigger**: V17 still weak on sunrise/sunset predictions.
+
+**Current**: `day_night_est = cos(2π × (hour + midpoint_lon/15) / 24)`
+
+**Enhancement Options**:
+1. Solar terminator distance (km from grey line)
+2. Minute-level resolution (not just hour)
+3. Explicit sunrise/sunset flags per path
+
+**Implementation**: Add 1-2 features, retrain. Low risk.
+
+### Option D: NVIS Gap Remediation
+
+**Trigger**: 160m recall still < 50% after V17.
+
+**Root Cause Hypotheses**:
+1. WSPR 160m is sparse (fewer operators)
+2. RBN 160m skimmers concentrated in NA/EU
+3. NVIS physics different from skip (need separate model?)
+
+**Remediation Options**:
+1. Upsample 160m/80m in training (balance bands)
+2. Add explicit NVIS flag (distance < 500km + band < 80m)
+3. Separate NVIS model (V18-NVIS)
+
+---
+
+## Phase 4: Long-Term Vision
+
+### The "Living Model" Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    IONIS Production                      │
+├─────────────────────────────────────────────────────────┤
+│  Stable Model (V17+)     │  Challenger Model (V18-dev)  │
+│  - Serves predictions    │  - Trains on new data        │
+│  - Validated daily       │  - A/B tested weekly         │
+│  - Rollback available    │  - Promoted if better        │
+└─────────────────────────────────────────────────────────┘
+         ↑                            ↑
+    Live PSK Reporter            Historical + Live
+    + Real Solar                 Training Pool
+```
+
+### Milestone Targets
+
+| Milestone | Target Date | Criteria |
+|-----------|-------------|----------|
+| V17 Validated | 2026-02-11 | Pass all validation tests |
+| Production API | 2026-02-15 | FastAPI + ONNX serving |
+| Live Validation | 2026-02-20 | 7-day rolling comparison |
+| V18 Decision | 2026-03-01 | Based on production metrics |
+| NVIS Remediation | 2026-03-15 | 160m recall > 60% |
+
+---
+
+## Open Questions
+
+1. **VOACAP Integration**: Do we run itshfbc locally or use an API? License?
+2. **Alert System**: Who gets notified if IONIS drifts below VOACAP?
+3. **User Interface**: CLI only? Web dashboard? Ham radio logger integration?
+4. **Public Release**: Open source the model? API access for others?
+
+---
+
+## Appendix: Training Data Pool Status
+
+| Source | Rows | Used in V17 | Available |
+|--------|------|-------------|-----------|
+| WSPR signatures | 93.3M | 20M (21%) | 73.3M |
+| RBN signatures | 56.7M | 20M (35%) | 36.7M |
+| Contest signatures | 6.3M | 6.3M (100%) | — |
+| DXpedition paths | 91K | 91K × 50 | — |
+| PSK Reporter | ~26M/day | 0 | Growing |
+| **Total Pool** | **156.4M** | **51M** | **110M+** |
+
+**Note**: V17 uses 33% of available non-PSK data. Full-data V17.1 possible if needed.
+
+---
+
+*Draft by Claude-M3, 2026-02-10. Pending review by 9975WX and Gemini Pro.*
