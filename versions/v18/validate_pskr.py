@@ -208,6 +208,20 @@ def haversine_km(lat1, lon1, lat2, lon2):
     a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam/2)**2
     return 2 * R * math.asin(math.sqrt(a))
 
+
+def compute_azimuth(lat1, lon1, lat2, lon2):
+    """Calculate initial bearing (azimuth) from point 1 to point 2 in degrees."""
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dlam = math.radians(lon2 - lon1)
+
+    x = math.sin(dlam) * math.cos(phi2)
+    y = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlam)
+
+    bearing = math.atan2(x, y)
+    return (math.degrees(bearing) + 360) % 360  # Normalize to 0-360
+
+
 # ============================================================================
 # Feature Engineering (must match training exactly)
 # ============================================================================
@@ -216,44 +230,69 @@ def compute_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_mhz, hour, month, sfi,
     """
     Compute the 13 input features for IonisV12Gate.
     Must match training feature engineering exactly.
-    """
-    # Normalize coordinates
-    tx_lat_n = tx_lat / 90.0
-    tx_lon_n = tx_lon / 180.0
-    rx_lat_n = rx_lat / 90.0
-    rx_lon_n = rx_lon / 180.0
 
-    # Distance
+    Feature order (from train_v18.py):
+    0. distance / 20000.0
+    1. log10(freq_hz) / 8.0
+    2. sin(2π × hour / 24)
+    3. cos(2π × hour / 24)
+    4. sin(2π × azimuth / 360)
+    5. cos(2π × azimuth / 360)
+    6. |tx_lat - rx_lat| / 180.0
+    7. midpoint_lat / 90.0
+    8. sin(2π × month / 12)
+    9. cos(2π × month / 12)
+    10. cos(2π × (hour + midpoint_lon/15) / 24)
+    11. sfi / 300.0
+    12. (1 - kp/9)  -- kp_penalty
+    """
+    # Distance (km, normalized)
     dist_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
     dist_n = dist_km / 20000.0
 
-    # Frequency (log scale, normalized)
-    freq_log = math.log10(freq_mhz) / 2.0 if freq_mhz > 0 else 0
+    # Frequency (Hz, log scale, normalized by 8)
+    freq_hz = freq_mhz * 1_000_000  # Convert MHz to Hz
+    freq_log = math.log10(freq_hz) / 8.0 if freq_hz > 0 else 0
 
     # Time encoding (cyclical)
-    hour_rad = 2 * math.pi * hour / 24.0
-    hour_sin = math.sin(hour_rad)
-    hour_cos = math.cos(hour_rad)
+    hour_sin = math.sin(2 * math.pi * hour / 24.0)
+    hour_cos = math.cos(2 * math.pi * hour / 24.0)
 
-    month_rad = 2 * math.pi * (month - 1) / 12.0
-    month_sin = math.sin(month_rad)
-    month_cos = math.cos(month_rad)
+    # Azimuth (bearing from TX to RX)
+    azimuth = compute_azimuth(tx_lat, tx_lon, rx_lat, rx_lon)
+    azimuth_sin = math.sin(2 * math.pi * azimuth / 360.0)
+    azimuth_cos = math.cos(2 * math.pi * azimuth / 360.0)
 
-    # Day/night estimate (simplified)
+    # Latitude features
+    lat_delta = abs(tx_lat - rx_lat) / 180.0
+    midpoint_lat = (tx_lat + rx_lat) / 2.0 / 90.0
+
+    # Month encoding (cyclical, month is 1-12)
+    month_sin = math.sin(2 * math.pi * month / 12.0)
+    month_cos = math.cos(2 * math.pi * month / 12.0)
+
+    # Local solar time at midpoint
     midpoint_lon = (tx_lon + rx_lon) / 2.0
-    solar_hour = (hour + midpoint_lon / 15.0) % 24
-    day_night = 1.0 if 6 <= solar_hour <= 18 else 0.0
+    local_solar_cos = math.cos(2 * math.pi * (hour + midpoint_lon / 15.0) / 24.0)
 
     # Solar indices (normalized)
     sfi_n = sfi / 300.0
-    kp_n = kp / 9.0
+    kp_penalty = 1.0 - kp / 9.0  # CRITICAL: kp_penalty, not kp_n
 
     return [
-        tx_lat_n, tx_lon_n, rx_lat_n, rx_lon_n,
-        dist_n, freq_log,
-        hour_sin, hour_cos, month_sin, month_cos,
-        day_night,
-        sfi_n, kp_n
+        dist_n,           # 0
+        freq_log,         # 1
+        hour_sin,         # 2
+        hour_cos,         # 3
+        azimuth_sin,      # 4
+        azimuth_cos,      # 5
+        lat_delta,        # 6
+        midpoint_lat,     # 7
+        month_sin,        # 8
+        month_cos,        # 9
+        local_solar_cos,  # 10
+        sfi_n,            # 11
+        kp_penalty,       # 12
     ]
 
 # ============================================================================

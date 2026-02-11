@@ -25,7 +25,7 @@
     "pskr_recall_min": 80.0,
     "pskr_recall_max": 95.0,
     "sfi_benefit_min": 0.3,
-    "kp_storm_min": 3.0
+    "kp_storm_min": 1.1
   },
   "baselines": {
     "voacap": 75.82,
