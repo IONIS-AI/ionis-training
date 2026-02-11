@@ -1,0 +1,35 @@
+{
+  "version": "v18",
+  "checkpoint": "ionis_v18.pth",
+  "architecture": "IonisV12Gate",
+  "normalization": "global",
+  "norm_keys": {
+    "mean": "global_mean",
+    "std": "global_std"
+  },
+  "thresholds": {
+    "wspr": -28.0,
+    "ft8": -20.0,
+    "ft4": -20.0,
+    "jt65": -24.0,
+    "jt9": -24.0,
+    "js8": -21.0,
+    "cw_human": -10.0,
+    "cw_machine": -18.0,
+    "rtty": -5.0,
+    "ssb": 5.0
+  },
+  "validation": {
+    "step_i_recall_min": 80.0,
+    "step_i_recall_max": 99.0,
+    "pskr_recall_min": 80.0,
+    "pskr_recall_max": 95.0,
+    "sfi_benefit_min": 0.3,
+    "kp_storm_min": 3.0
+  },
+  "baselines": {
+    "voacap": 75.82,
+    "previous_version": "v16",
+    "previous_recall": 96.38
+  }
+}

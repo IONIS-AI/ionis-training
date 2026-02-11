@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IONIS Version Config",
+  "description": "Configuration for IONIS model version validation scripts",
+  "type": "object",
+  "required": ["version", "checkpoint", "architecture"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Version identifier (e.g., 'v18')"
+    },
+    "checkpoint": {
+      "type": "string",
+      "description": "Checkpoint filename (e.g., 'ionis_v18.pth')"
+    },
+    "architecture": {
+      "type": "string",
+      "description": "Model class name (e.g., 'IonisV12Gate')"
+    },
+    "normalization": {
+      "type": "string",
+      "enum": ["global", "per_source", "per_band"],
+      "description": "Normalization strategy used during training"
+    },
+    "norm_keys": {
+      "type": "object",
+      "description": "Checkpoint keys for normalization constants",
+      "properties": {
+        "mean": {"type": "string"},
+        "std": {"type": "string"}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "description": "Mode SNR thresholds in dB",
+      "properties": {
+        "wspr": {"type": "number"},
+        "ft8": {"type": "number"},
+        "ft4": {"type": "number"},
+        "jt65": {"type": "number"},
+        "jt9": {"type": "number"},
+        "js8": {"type": "number"},
+        "cw_human": {"type": "number"},
+        "cw_machine": {"type": "number"},
+        "rtty": {"type": "number"},
+        "ssb": {"type": "number"}
+      }
+    },
+    "validation": {
+      "type": "object",
+      "description": "Expected validation ranges",
+      "properties": {
+        "step_i_recall_min": {"type": "number"},
+        "step_i_recall_max": {"type": "number"},
+        "pskr_recall_min": {"type": "number"},
+        "pskr_recall_max": {"type": "number"},
+        "sfi_benefit_min": {"type": "number"},
+        "kp_storm_min": {"type": "number"}
+      }
+    },
+    "baselines": {
+      "type": "object",
+      "description": "Baseline comparisons",
+      "properties": {
+        "voacap": {"type": "number"},
+        "previous_version": {"type": "string"},
+        "previous_recall": {"type": "number"}
+      }
+    }
+  }
+}
