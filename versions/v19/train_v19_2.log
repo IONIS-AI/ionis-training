@@ -1,0 +1,125 @@
+08:56:07 | IONIS V19.2 Differential LR | V19.2 Differential LR (Physics First)
+08:56:07 | Device: mps | Epochs: 100 | Batch: 65536
+08:56:07 | Data sources: WSPR + RBN Full + RBN DX (50x) + Contest
+08:56:07 | Normalization: PER-SOURCE Z-score (Rosetta Stone)
+08:56:07 | Storm upsample: 20x for Kp >= 5
+08:56:07 | Learning rates: Trunk=1e-05, Sidecars=0.001 (100x faster)
+08:56:07 | 
+08:56:07 | Connecting to ClickHouse at 10.60.1.1:8123...
+08:56:07 | WSPR terrestrial signatures available: 93,339,408
+08:56:07 | Loading WSPR floor data (sample 20,000,000)...
+08:56:14 | WSPR: 20,000,000 rows in 7.4s
+08:56:14 | RBN full signatures available: 56,726,737
+08:56:14 | Loading RBN middle data (sample 20,000,000)...
+08:56:21 | RBN Full: 20,000,000 rows in 7.0s
+08:56:21 | RBN DXpedition signatures available: 91,301
+08:56:21 | Loading RBN DXpedition data (all rows)...
+08:56:21 | RBN DXpedition: 91,301 rows in 0.0s
+08:56:21 | Contest signatures available: 6,337,800
+08:56:21 | Loading Contest ceiling data (all rows)...
+08:56:23 | Contest: 6,337,485 rows in 2.1s
+08:56:23 | 
+08:56:23 | === V19.2 PER-SOURCE NORMALIZATION (Rosetta Stone) ===
+08:56:23 | Per-source normalization constants:
+08:56:23 |   WSPR:    mean=-17.77 dB, std=6.33 dB
+08:56:23 |   RBN:     mean=17.85 dB, std=8.18 dB
+08:56:23 |   Contest: mean=5.64 dB, std=4.96 dB
+08:56:23 | 
+08:56:23 | Normalized Z-scores (should all be ~0 mean, ~1 std):
+08:56:23 |   WSPR:    mean=0.0000, std=1.0000
+08:56:23 |   RBN:     mean=0.0006, std=1.0006
+08:56:23 |   Contest: mean=0.0000, std=1.0000
+08:56:23 | 
+08:56:23 | Engineering features...
+08:57:19 | Upsampling RBN DXpedition 50x...
+08:57:19 |   DXpedition effective rows: 4,565,050
+08:57:19 |   Contest effective rows: 6,337,485
+08:57:20 | 
+08:57:20 | Combined dataset (before storm upsample): 50,902,535 rows
+08:57:20 |   WSPR (floor):       20,000,000 (39.3%)
+08:57:20 |   RBN Full (middle):  20,000,000 (39.3%)
+08:57:20 |   RBN DX (rare):      4,565,050 (9.0%)
+08:57:20 |   Contest (ceiling):  6,337,485 (12.5%)
+08:57:20 | Storm upsample: 145,768 rows with Kp >= 5 (0.29%)
+08:57:20 |   Upsampling storm rows 20x...
+08:57:20 |   After storm upsample: 53,817,895 rows (+2,915,360)
+08:57:20 | 
+08:57:20 | Combined targets (Z-scores): mean=-0.0013, std=0.9936
+08:57:21 | Dataset: 53,817,895 rows x 13 features
+08:57:21 | Source data range: 2008-03-11 to 2026-02-01
+08:57:22 | Split: 43,054,316 train / 10,763,579 val
+08:57:22 | Model: IonisV12Gate (173,173 params)
+08:57:22 | Trainable: 173,173 / 173,173
+08:57:22 | 
+08:57:22 | === V19.2 DIFFERENTIAL LEARNING RATES ===
+08:57:22 |   Trunk (172,289 params):   lr=1e-05
+08:57:22 |   Gates (834 params):    lr=1e-05
+08:57:22 |   Sidecars (50 params): lr=0.001 (100x boost)
+08:57:22 | 
+08:57:22 |  Ep     Train       Val     RMSE   Pearson   SFI+   Kp9-    Time
+08:57:22 | ----------------------------------------------------------------
+09:02:17 |   1    0.7886    0.7279   0.853σ  +0.2269  +0.15  +0.15  294.6s *
+09:07:27 |   2    0.7301    0.7082   0.842σ  +0.2608  +0.18  +0.10  310.2s *
+09:12:44 |   3    0.7170    0.6969   0.835σ  +0.2785  +0.19  +0.07  316.3s *
+09:18:07 |   4    0.7077    0.6910   0.831σ  +0.2889  +0.19  +0.05  323.4s *
+09:23:23 |   5    0.7016    0.6874   0.829σ  +0.2948  +0.19  +0.04  315.8s *
+09:28:46 |   6    0.6976    0.6837   0.827σ  +0.2985  +0.20  +0.03  323.7s *
+09:34:04 |   7    0.6946    0.6833   0.827σ  +0.3012  +0.19  +0.02  317.9s *
+09:39:28 |   8    0.6922    0.6806   0.825σ  +0.3033  +0.20  +0.01  323.7s *
+000,000)...
+09:03:38 | WSPR: 20,000,000 rows in 7.6s
+09:03:38 | RBN full signatures available: 56,726,737
+09:03:38 | Loading RBN middle data (sample 20,000,000)...
+09:03:45 | RBN Full: 20,000,000 rows in 7.4s
+09:03:45 | RBN DXpedition signatures available: 91,301
+09:03:45 | Loading RBN DXpedition data (all rows)...
+09:03:45 | RBN DXpedition: 91,301 rows in 0.0s
+09:03:45 | Contest signatures available: 6,337,800
+09:03:45 | Loading Contest ceiling data (all rows)...
+09:03:47 | Contest: 6,337,485 rows in 2.2s
+09:03:47 | 
+09:03:47 | === V19.2 PER-SOURCE NORMALIZATION (Rosetta Stone) ===
+09:03:48 | Per-source normalization constants:
+09:03:48 |   WSPR:    mean=-17.77 dB, std=6.33 dB
+09:03:48 |   RBN:     mean=17.85 dB, std=8.18 dB
+09:03:48 |   Contest: mean=5.64 dB, std=4.96 dB
+09:03:48 | 
+09:03:48 | Normalized Z-scores (should all be ~0 mean, ~1 std):
+09:03:48 |   WSPR:    mean=-0.0000, std=1.0000
+09:03:48 |   RBN:     mean=0.0006, std=1.0006
+09:03:48 |   Contest: mean=0.0000, std=1.0000
+09:03:48 | 
+09:03:48 | Engineering features...
+09:04:48 | Upsampling RBN DXpedition 50x...
+09:04:48 |   DXpedition effective rows: 4,565,050
+09:04:48 |   Contest effective rows: 6,337,485
+09:04:48 | 
+09:04:48 | Combined dataset (before storm upsample): 50,902,535 rows
+09:04:48 |   WSPR (floor):       20,000,000 (39.3%)
+09:04:48 |   RBN Full (middle):  20,000,000 (39.3%)
+09:04:48 |   RBN DX (rare):      4,565,050 (9.0%)
+09:04:48 |   Contest (ceiling):  6,337,485 (12.5%)
+09:04:48 | Storm upsample: 145,261 rows with Kp >= 5 (0.29%)
+09:04:48 |   Upsampling storm rows 20x...
+09:04:49 |   After storm upsample: 53,807,755 rows (+2,905,220)
+09:04:49 | 
+09:04:49 | Combined targets (Z-scores): mean=-0.0015, std=0.9935
+09:04:49 | Dataset: 53,807,755 rows x 13 features
+09:04:49 | Source data range: 2008-03-11 to 2026-02-01
+09:04:51 | Split: 43,046,204 train / 10,761,551 val
+09:04:51 | Model: IonisV12Gate (173,173 params)
+09:04:51 | Trainable: 173,173 / 173,173
+09:04:51 | 
+09:04:51 | === V19.2 DIFFERENTIAL LEARNING RATES ===
+09:04:51 |   Trunk (172,289 params):   lr=1e-05
+09:04:51 |   Gates (834 params):    lr=1e-05
+09:04:51 |   Sidecars (50 params): lr=0.001 (100x boost)
+09:04:51 | 
+09:04:51 |  Ep     Train       Val     RMSE   Pearson   SFI+   Kp9-    Time
+09:04:51 | ----------------------------------------------------------------
+09:10:16 |   1    0.9282    0.7378   0.859σ  +0.2254  +0.11  +0.16  324.8s *
+09:15:37 |   2    0.7301    0.7146   0.845σ  +0.2587  +0.17  +0.10  320.6s *
+09:20:58 |   3    0.7164    0.7031   0.839σ  +0.2776  +0.18  +0.07  321.1s *
+09:26:18 |   4    0.7073    0.6957   0.834σ  +0.2879  +0.19  +0.05  320.2s *
+09:31:41 |   5    0.7016    0.6905   0.831σ  +0.2944  +0.20  +0.04  322.7s *
+09:37:03 |   6    0.6975    0.6874   0.829σ  +0.2978  +0.20  +0.02  321.8s *
