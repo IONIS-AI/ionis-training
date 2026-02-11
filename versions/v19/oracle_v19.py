@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-oracle_v19.py — IONIS V19 Rosetta Stone Oracle
+oracle_v19.py — IONIS V19 Oracle (Config-driven)
+
+This is a thin wrapper that:
+1. Loads configuration from config_v19_3.json
+2. Imports IonisModel from versions/common/train_common.py
+3. Provides the Rosetta Stone decoder for mode-appropriate SNR predictions
 
 The V19 oracle implements the "Rosetta Stone" decoder:
-    - Model outputs Z-score (σ) = signal quality relative to average
+    - Model outputs Z-score (sigma) = signal quality relative to average
     - Denormalize using source-appropriate constants based on mode
 
 Mode mapping (from config.json):
-    - WSPR/FT8/FT4/JT65/JT9/JS8 → use WSPR constants (weak signal)
-    - CW_machine/RTTY → use RBN constants (skimmer)
-    - CW_human/SSB → use Contest constants (human ear)
+    - WSPR/FT8/FT4/JT65/JT9/JS8 -> use WSPR constants (weak signal)
+    - CW_machine/RTTY -> use RBN constants (skimmer)
+    - CW_human/SSB -> use Contest constants (human ear)
 
 Usage:
     from oracle_v19 import IonisOracle
@@ -30,27 +35,35 @@ import sys
 
 import numpy as np
 import torch
-import torch.nn as nn
 
-
+# Add parent directory to path for common imports
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(SCRIPT_DIR, "ionis_v19.pth")
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, VERSIONS_DIR)
+
+from common.train_common import (
+    IonisModel,
+    grid4_to_latlon,
+)
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config_v19_3.json")
+MODEL_FILE = os.path.join(SCRIPT_DIR, "ionis_v19_3.pth")
+
+with open(CONFIG_FILE) as f:
+    CONFIG = json.load(f)
 
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-DNN_DIM = 11
-SFI_IDX = 11
-KP_PENALTY_IDX = 12
-INPUT_DIM = 13
-GATE_INIT_BIAS = -math.log(2.0)
+# Extract model dimensions from config
+DNN_DIM = CONFIG["model"]["dnn_dim"]
+INPUT_DIM = CONFIG["model"]["input_dim"]
+SFI_IDX = CONFIG["model"]["sfi_idx"]
+KP_PENALTY_IDX = CONFIG["model"]["kp_penalty_idx"]
 
-BAND_TO_HZ = {
-    102:  1_836_600,   103:  3_568_600,   104:  5_287_200,
-    105:  7_038_600,   106: 10_138_700,   107: 14_097_100,
-    108: 18_104_600,   109: 21_094_600,   110: 24_924_600,
-    111: 28_124_600,
-}
+# Convert band_to_hz keys to int (JSON keys are strings)
+BAND_TO_HZ = {int(k): v for k, v in CONFIG["band_to_hz"].items()}
 
 BAND_NAME_TO_ID = {
     '160m': 102, '80m': 103, '60m': 104, '40m': 105, '30m': 106,
@@ -60,91 +73,7 @@ BAND_NAME_TO_ID = {
 GRID_RE = re.compile(r'[A-Ra-r]{2}[0-9]{2}')
 
 
-# ── Model Architecture ───────────────────────────────────────────────────────
-
-class MonotonicMLP(nn.Module):
-    def __init__(self, hidden_dim=8):
-        super().__init__()
-        self.fc1 = nn.Linear(1, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, 1, bias=True)
-        self.activation = nn.Softplus()
-
-    def forward(self, x):
-        w1 = torch.abs(self.fc1.weight)
-        w2 = torch.abs(self.fc2.weight)
-        h = self.activation(nn.functional.linear(x, w1, self.fc1.bias))
-        return nn.functional.linear(h, w2, self.fc2.bias)
-
-
-class IonisV12Gate(nn.Module):
-    def __init__(self, dnn_dim=DNN_DIM, hidden=256, sidecar_hidden=8):
-        super().__init__()
-
-        self.trunk = nn.Sequential(
-            nn.Linear(dnn_dim, hidden * 2),
-            nn.LayerNorm(hidden * 2),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(hidden * 2, hidden),
-            nn.LayerNorm(hidden),
-            nn.GELU(),
-            nn.Dropout(0.1),
-            nn.Linear(hidden, hidden // 2),
-            nn.LayerNorm(hidden // 2),
-            nn.GELU(),
-            nn.Linear(hidden // 2, 1),
-        )
-
-        self.sun_sidecar = MonotonicMLP(sidecar_hidden)
-        self.storm_sidecar = MonotonicMLP(sidecar_hidden)
-
-        self.sun_gate = nn.Sequential(
-            nn.Linear(dnn_dim, 32),
-            nn.GELU(),
-            nn.Linear(32, 1),
-        )
-        self.storm_gate = nn.Sequential(
-            nn.Linear(dnn_dim, 32),
-            nn.GELU(),
-            nn.Linear(32, 1),
-        )
-
-    def forward(self, x):
-        x_dnn = x[:, :DNN_DIM]
-        sfi_in = x[:, SFI_IDX:SFI_IDX+1]
-        kp_penalty = x[:, KP_PENALTY_IDX:KP_PENALTY_IDX+1]
-
-        base = self.trunk(x_dnn)
-        sun_effect = self.sun_sidecar(sfi_in)
-        storm_effect = self.storm_sidecar(kp_penalty)
-
-        sun_g = torch.sigmoid(self.sun_gate(x_dnn)) + 0.5
-        storm_g = torch.sigmoid(self.storm_gate(x_dnn)) + 0.5
-
-        return base + sun_g * sun_effect + storm_g * storm_effect
-
-    def get_sun_effect(self, sfi_normalized):
-        with torch.no_grad():
-            inp = torch.tensor([[sfi_normalized]], dtype=torch.float32, device=DEVICE)
-            return self.sun_sidecar(inp).item()
-
-    def get_storm_effect(self, kp_penalty):
-        with torch.no_grad():
-            inp = torch.tensor([[kp_penalty]], dtype=torch.float32, device=DEVICE)
-            return self.storm_sidecar(inp).item()
-
-
-# ── Utilities ────────────────────────────────────────────────────────────────
-
-def grid4_to_latlon(g):
-    """Convert 4-char Maidenhead grid to (lat, lon) centroid."""
-    s = str(g).strip().rstrip('\x00').upper()
-    m = GRID_RE.search(s)
-    g4 = m.group(0) if m else 'JJ00'
-    lon = (ord(g4[0]) - ord('A')) * 20.0 - 180.0 + int(g4[2]) * 2.0 + 1.0
-    lat = (ord(g4[1]) - ord('A')) * 10.0 - 90.0 + int(g4[3]) * 1.0 + 0.5
-    return lat, lon
-
+# ── Utilities ─────────────────────────────────────────────────────────────────
 
 def haversine_km(lat1, lon1, lat2, lon2):
     """Calculate great-circle distance in km."""
@@ -165,24 +94,20 @@ def compute_azimuth(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 
-# ── Oracle ───────────────────────────────────────────────────────────────────
+# ── Oracle ────────────────────────────────────────────────────────────────────
 
 class IonisOracle:
     """
     IONIS V19 Oracle with Rosetta Stone decoder.
 
-    The model outputs Z-score (σ) representing signal quality.
+    The model outputs Z-score (sigma) representing signal quality.
     The Rosetta Stone maps modes to their appropriate normalization constants
     to produce physically meaningful dB predictions.
     """
 
-    def __init__(self, model_path=None, config_path=None):
-        self.model_path = model_path or MODEL_PATH
-        self.config_path = config_path or CONFIG_PATH
-
-        # Load config
-        with open(self.config_path, 'r') as f:
-            self.config = json.load(f)
+    def __init__(self, model_path=None, config=None):
+        self.model_path = model_path or MODEL_FILE
+        self.config = config or CONFIG
 
         self.norm_constants = self.config['norm_constants']
         self.mode_map = self.config['mode_map']
@@ -191,7 +116,7 @@ class IonisOracle:
         # Load model
         checkpoint = torch.load(self.model_path, map_location=DEVICE, weights_only=False)
 
-        self.model = IonisV12Gate(dnn_dim=DNN_DIM, hidden=256, sidecar_hidden=8)
+        self.model = IonisModel(self.config)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.model.to(DEVICE)
         self.model.eval()
@@ -200,10 +125,10 @@ class IonisOracle:
         if 'norm_constants' in checkpoint:
             self.norm_constants = checkpoint['norm_constants']
 
-        self.version = checkpoint.get('version', 'v19')
+        self.version = self.config.get('version', 'v19')
 
     def _compute_features(self, tx_lat, tx_lon, rx_lat, rx_lon, band_id, hour, month, sfi, kp):
-        """Compute 13 input features for the model."""
+        """Compute input features for the model."""
         freq_hz = BAND_TO_HZ.get(band_id, 14_097_100)
         distance = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
         azimuth = compute_azimuth(tx_lat, tx_lon, rx_lat, rx_lon)
@@ -222,8 +147,8 @@ class IonisOracle:
         features[8] = np.sin(2 * np.pi * month / 12.0)
         features[9] = np.cos(2 * np.pi * month / 12.0)
         features[10] = np.cos(2 * np.pi * (hour + midpoint_lon / 15.0) / 24.0)
-        features[11] = sfi / 300.0
-        features[12] = 1.0 - kp / 9.0
+        features[SFI_IDX] = sfi / 300.0
+        features[KP_PENALTY_IDX] = 1.0 - kp / 9.0
 
         return features
 
@@ -231,10 +156,10 @@ class IonisOracle:
         """
         Rosetta Stone decoder: Map Z-score to dB using mode-appropriate constants.
 
-        A +1.0σ prediction means "this path is 1 std better than average."
-        - For WSPR: +1σ → -11 dB (great weak-signal path)
-        - For RBN:  +1σ → +26 dB (booming CW signal)
-        - For SSB:  +1σ → +12 dB (solid voice copy)
+        A +1.0 sigma prediction means "this path is 1 std better than average."
+        - For WSPR: +1 sigma -> -11 dB (great weak-signal path)
+        - For RBN:  +1 sigma -> +26 dB (booming CW signal)
+        - For SSB:  +1 sigma -> +12 dB (solid voice copy)
         """
         mode_lower = mode.lower().replace('-', '_')
 
@@ -289,10 +214,10 @@ class IonisOracle:
             sigma = self.model(X).cpu().item()
 
         # Rosetta decode for requested mode
-        mode_lower = mode.lower().replace('-', '_')
         snr_db, source = self._rosetta_decode(sigma, mode)
 
         # Get threshold
+        mode_lower = mode.lower().replace('-', '_')
         threshold = self.thresholds.get(mode_lower, -15.0)
         band_open = snr_db >= threshold
 
@@ -315,7 +240,7 @@ class IonisOracle:
         """
         Predict propagation and return band-open status for all modes.
 
-        Returns dict mapping mode → {snr_db, threshold, band_open}
+        Returns dict mapping mode -> {snr_db, threshold, band_open}
         """
         # Get base prediction
         result = self.predict(tx_grid, rx_grid, band, hour, month, sfi, kp, mode='ft8')
@@ -340,7 +265,7 @@ class IonisOracle:
         }
 
 
-# ── CLI ──────────────────────────────────────────────────────────────────────
+# ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(description='IONIS V19 Oracle (Rosetta Stone)')
@@ -359,7 +284,7 @@ def main():
     oracle = IonisOracle()
 
     print(f"IONIS {oracle.version} Oracle (Rosetta Stone)")
-    print(f"Path: {args.tx_grid} → {args.rx_grid} on {args.band}")
+    print(f"Path: {args.tx_grid} -> {args.rx_grid} on {args.band}")
     print(f"Conditions: SFI={args.sfi}, Kp={args.kp}, {args.hour:02d}Z, Month {args.month}")
     print()
 
@@ -368,7 +293,7 @@ def main():
             args.tx_grid, args.rx_grid, args.band,
             args.hour, args.month, args.sfi, args.kp
         )
-        print(f"Signal Quality (σ): {result['sigma']:+.3f}")
+        print(f"Signal Quality (sigma): {result['sigma']:+.3f}")
         print()
         print("Mode            SNR (dB)   Threshold   Band Open   Source")
         print("-" * 60)
@@ -381,7 +306,7 @@ def main():
             args.hour, args.month, args.sfi, args.kp, args.mode
         )
         print(f"Mode: {args.mode.upper()}")
-        print(f"Signal Quality (σ): {result['sigma']:+.3f}")
+        print(f"Signal Quality (sigma): {result['sigma']:+.3f}")
         print(f"Predicted SNR: {result['snr_db']:+.1f} dB (using {result['source']} scale)")
         print(f"Threshold: {result['threshold']:+.1f} dB")
         print(f"Band Open: {'YES' if result['band_open'] else 'NO'}")
