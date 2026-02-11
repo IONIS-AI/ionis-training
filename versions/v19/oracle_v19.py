@@ -48,8 +48,8 @@ from common.train_common import (
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
-CONFIG_FILE = os.path.join(SCRIPT_DIR, "config_v19_3.json")
-MODEL_FILE = os.path.join(SCRIPT_DIR, "ionis_v19_3.pth")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config_v19_4.json")
+MODEL_FILE = os.path.join(SCRIPT_DIR, "ionis_v19_4.pth")
 
 with open(CONFIG_FILE) as f:
     CONFIG = json.load(f)
