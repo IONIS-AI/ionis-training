@@ -681,7 +681,7 @@ def main():
     print(f"  Checkpoint: {checkpoint_path}")
     print(f"  Source:     {args.source}")
     print(f"  Profile:    {args.profile} (+{advantage_db:.1f} dB)")
-    print(f"              {profile_info['power_w']}W, TX {profile_info['gain_tx_dbi']} dBi, RX {profile_info['gain_rx_dbi']} dBi")
+    print(f"              {profile_info['tx_power_w']}W, TX {profile_info['tx_gain_dbi']} dBi, RX {profile_info['rx_gain_dbi']} dBi")
     print(f"  Limit:      {args.limit if args.limit else 'all'}")
     print()
 
