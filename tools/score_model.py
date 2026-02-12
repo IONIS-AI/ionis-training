@@ -822,10 +822,7 @@ def main():
     model.load_state_dict(checkpoint['model_state'])
     model.eval()
 
-    param_count = sum(p.numel() for p in model.parameters())
-    print(f"  Architecture: {config['model']['architecture']} ({param_count:,} params)")
-    print(f"  Checkpoint Pearson: {checkpoint.get('val_pearson', 'N/A')}")
-    print()
+    # Model loaded silently - details in config
 
     # Build per-band WSPR norm constants: {band_id: (mean, std)}
     norm_constants = {}
