@@ -95,16 +95,63 @@ VIABILITY = {
 # IONIS vs VOACAP comparisons are apples-to-apples.
 
 PROFILES = {
+    # ── Baseline / Reference ──────────────────────────────────────────────
     'wspr': {
-        'description': 'WSPR beacon (200 mW, isotropic) — baseline, no adjustment',
+        'description': 'WSPR beacon (200 mW, isotropic) — model baseline',
         'tx_power_w': 0.2,
         'tx_gain_dbi': 0.0,
         'rx_gain_dbi': 0.0,
     },
+    'wspr_dipole': {
+        'description': 'WSPR beacon (200 mW, dipole both ends)',
+        'tx_power_w': 0.2,
+        'tx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.0,
+    },
+    'voacap_default': {
+        'description': 'VOACAP default (100W, isotropic) — DXLook baseline',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 0.0,
+        'rx_gain_dbi': 0.0,
+    },
+
+    # ── QRP / Portable ────────────────────────────────────────────────────
+    'qrp_milliwatt': {
+        'description': 'Milliwatt QRP (1W, random wire) — extreme QRP',
+        'tx_power_w': 1.0,
+        'tx_gain_dbi': -3.0,
+        'rx_gain_dbi': 0.0,
+    },
     'qrp_portable': {
-        'description': 'QRP portable (5W, compromise antenna)',
+        'description': 'QRP portable (5W, EFHW) — SOTA/POTA activator',
         'tx_power_w': 5.0,
         'tx_gain_dbi': -3.0,
+        'rx_gain_dbi': 0.0,
+    },
+    'qrp_home': {
+        'description': 'QRP home (5W, dipole both ends)',
+        'tx_power_w': 5.0,
+        'tx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.0,
+    },
+    'sota_activator': {
+        'description': 'SOTA summit (10W, linked dipole on 6m mast)',
+        'tx_power_w': 10.0,
+        'tx_gain_dbi': -1.0,
+        'rx_gain_dbi': 0.0,
+    },
+    'pota_activator': {
+        'description': 'POTA park (20W, EFHW at 30 ft, chaser has dipole)',
+        'tx_power_w': 20.0,
+        'tx_gain_dbi': 0.0,
+        'rx_gain_dbi': 2.0,
+    },
+
+    # ── License-Class Typical ─────────────────────────────────────────────
+    'home_vertical': {
+        'description': 'Home vertical (100W, ground-mounted vertical)',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 0.0,
         'rx_gain_dbi': 0.0,
     },
     'home_station': {
@@ -113,23 +160,91 @@ PROFILES = {
         'tx_gain_dbi': 2.0,
         'rx_gain_dbi': 2.0,
     },
+    'home_beam': {
+        'description': 'Home beam (100W, 3-el Yagi TX, dipole RX)',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 8.0,
+        'rx_gain_dbi': 2.0,
+    },
+
+    # ── Amplified Home Station ────────────────────────────────────────────
+    'home_amp_dipole': {
+        'description': 'Amplified home (500W, dipole both ends)',
+        'tx_power_w': 500.0,
+        'tx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.0,
+    },
+    'home_amp_beam': {
+        'description': 'Amplified home beam (500W, tribander both ends)',
+        'tx_power_w': 500.0,
+        'tx_gain_dbi': 8.0,
+        'rx_gain_dbi': 8.0,
+    },
+    'big_gun': {
+        'description': 'Big gun (1.5 kW, stacked Yagis, low-noise RX)',
+        'tx_power_w': 1500.0,
+        'tx_gain_dbi': 10.0,
+        'rx_gain_dbi': 10.0,
+    },
+
+    # ── Contest ───────────────────────────────────────────────────────────
+    'contest_lp': {
+        'description': 'Contest LP (100W, tribander) — ARRL/CQ LP category',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 8.0,
+        'rx_gain_dbi': 8.0,
+    },
     'contest_cw': {
-        'description': 'Contest CW (1 kW, tribander both ends)',
+        'description': 'Contest CW HP (1 kW, tribander both ends)',
         'tx_power_w': 1000.0,
         'tx_gain_dbi': 8.0,
         'rx_gain_dbi': 8.0,
     },
     'contest_ssb': {
-        'description': 'Contest SSB (1.5 kW, stacked Yagis)',
+        'description': 'Contest SSB HP (1.5 kW, stacked Yagis)',
         'tx_power_w': 1500.0,
         'tx_gain_dbi': 10.0,
         'rx_gain_dbi': 10.0,
     },
+    'contest_super': {
+        'description': 'Super station (1.5 kW, stacked monobanders, K3LR-class)',
+        'tx_power_w': 1500.0,
+        'tx_gain_dbi': 14.0,
+        'rx_gain_dbi': 14.0,
+    },
+
+    # ── DXpedition ────────────────────────────────────────────────────────
+    'dxpedition_lite': {
+        'description': 'Suitcase DXpedition (100W, vertical on beach)',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 0.0,
+        'rx_gain_dbi': 0.0,
+    },
     'dxpedition': {
-        'description': 'DXpedition (1 kW, vertical + ground gain on salt water)',
+        'description': 'Mid-scale DXpedition (1 kW, vertical + salt water)',
         'tx_power_w': 1000.0,
         'tx_gain_dbi': 3.0,
         'rx_gain_dbi': 2.0,
+    },
+    'dxpedition_mega': {
+        'description': 'Mega DXpedition (1.5 kW, VDA/Yagi, Beverages RX)',
+        'tx_power_w': 1500.0,
+        'tx_gain_dbi': 8.0,
+        'rx_gain_dbi': 6.0,
+    },
+
+    # ── Special Operations ────────────────────────────────────────────────
+    'maritime_mobile': {
+        'description': 'Maritime mobile (100W, backstay antenna, poor ground)',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': -2.0,
+        'rx_gain_dbi': 0.0,
+    },
+    'eme_hf': {
+        'description': 'EME / extreme path (1.5 kW, large stacked arrays)',
+        'tx_power_w': 1500.0,
+        'tx_gain_dbi': 16.0,
+        'rx_gain_dbi': 16.0,
     },
 }
 
