@@ -105,8 +105,8 @@ PROFILES = {
     'wspr_dipole': {
         'description': 'WSPR beacon (200 mW, dipole both ends)',
         'tx_power_w': 0.2,
-        'tx_gain_dbi': 2.0,
-        'rx_gain_dbi': 2.0,
+        'tx_gain_dbi': 2.15,  # IEEE/VOACAP standard half-wave dipole
+        'rx_gain_dbi': 2.15,
     },
     'voacap_default': {
         'description': 'VOACAP default (100W, isotropic) — DXLook baseline',
@@ -131,8 +131,8 @@ PROFILES = {
     'qrp_home': {
         'description': 'QRP home (5W, dipole both ends)',
         'tx_power_w': 5.0,
-        'tx_gain_dbi': 2.0,
-        'rx_gain_dbi': 2.0,
+        'tx_gain_dbi': 2.15,
+        'rx_gain_dbi': 2.15,
     },
     'sota_activator': {
         'description': 'SOTA summit (10W, linked dipole on 6m mast)',
@@ -144,7 +144,7 @@ PROFILES = {
         'description': 'POTA park (20W, EFHW at 30 ft, chaser has dipole)',
         'tx_power_w': 20.0,
         'tx_gain_dbi': 0.0,
-        'rx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.15,
     },
 
     # ── License-Class Typical ─────────────────────────────────────────────
@@ -157,28 +157,28 @@ PROFILES = {
     'home_station': {
         'description': 'Typical home station (100W, dipole both ends)',
         'tx_power_w': 100.0,
-        'tx_gain_dbi': 2.0,
-        'rx_gain_dbi': 2.0,
+        'tx_gain_dbi': 2.15,
+        'rx_gain_dbi': 2.15,
     },
     'home_beam': {
-        'description': 'Home beam (100W, 3-el Yagi TX, dipole RX)',
+        'description': 'Home beam (100W, tribander TX, dipole RX)',
         'tx_power_w': 100.0,
-        'tx_gain_dbi': 8.0,
-        'rx_gain_dbi': 2.0,
+        'tx_gain_dbi': 7.5,   # Tribander (trap loss per Cebik Type 13)
+        'rx_gain_dbi': 2.15,
     },
 
     # ── Amplified Home Station ────────────────────────────────────────────
     'home_amp_dipole': {
         'description': 'Amplified home (500W, dipole both ends)',
         'tx_power_w': 500.0,
-        'tx_gain_dbi': 2.0,
-        'rx_gain_dbi': 2.0,
+        'tx_gain_dbi': 2.15,
+        'rx_gain_dbi': 2.15,
     },
     'home_amp_beam': {
         'description': 'Amplified home beam (500W, tribander both ends)',
         'tx_power_w': 500.0,
-        'tx_gain_dbi': 8.0,
-        'rx_gain_dbi': 8.0,
+        'tx_gain_dbi': 7.5,
+        'rx_gain_dbi': 7.5,
     },
     'big_gun': {
         'description': 'Big gun (1.5 kW, stacked Yagis, low-noise RX)',
@@ -191,14 +191,14 @@ PROFILES = {
     'contest_lp': {
         'description': 'Contest LP (100W, tribander) — ARRL/CQ LP category',
         'tx_power_w': 100.0,
-        'tx_gain_dbi': 8.0,
-        'rx_gain_dbi': 8.0,
+        'tx_gain_dbi': 7.5,
+        'rx_gain_dbi': 7.5,
     },
     'contest_cw': {
         'description': 'Contest CW HP (1 kW, tribander both ends)',
         'tx_power_w': 1000.0,
-        'tx_gain_dbi': 8.0,
-        'rx_gain_dbi': 8.0,
+        'tx_gain_dbi': 7.5,
+        'rx_gain_dbi': 7.5,
     },
     'contest_ssb': {
         'description': 'Contest SSB HP (1.5 kW, stacked Yagis)',
@@ -224,7 +224,7 @@ PROFILES = {
         'description': 'Mid-scale DXpedition (1 kW, vertical + salt water)',
         'tx_power_w': 1000.0,
         'tx_gain_dbi': 3.0,
-        'rx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.15,
     },
     'dxpedition_mega': {
         'description': 'Mega DXpedition (1.5 kW, VDA/Yagi, Beverages RX)',
