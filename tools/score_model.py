@@ -9,19 +9,27 @@ to validation.model_results, and prints summary stats.
 This is not version-specific — same tool for V20, V21, V22.
 
 Usage:
-    python tools/score_model.py --config versions/v20/config_v20.json --source rbn
-    python tools/score_model.py --config versions/v20/config_v20.json --source pskr --limit 100000
-    python tools/score_model.py --config versions/v20/config_v20.json --source contest
+    python tools/score_model.py --config versions/v20/config_v20.json --source rbn --profile home_station
+    python tools/score_model.py --config versions/v20/config_v20.json --source pskr --profile home_station
+    python tools/score_model.py --config versions/v20/config_v20.json --source contest --profile contest_cw
 
 Sources:
     rbn     — rbn.signatures (56.6M aggregated CW/RTTY/PSK31 paths)
     pskr    — pskr.bronze (raw FT8/FT4/CW/etc. spots, solar JOIN per day)
     contest — validation.step_i_paths (1M contest QSO paths with lat/lon)
 
-Predictions are denormalized to dB using per-band WSPR norm constants from
-the config. This gives a consistent absolute scale for mode viability
-thresholds. The snr_error is most meaningful for PSKR (similar scale to WSPR);
-for RBN/contest it includes a systematic source offset.
+Station profiles apply a link budget adjustment on top of the model's
+WSPR-equivalent prediction:
+
+    adjusted_snr = predicted_snr + 10*log10(P_tx/0.2W) + G_tx + G_rx
+
+The model predicts ionospheric propagation (the hard part). The profile
+adds the station-specific power + antenna advantage (the gearbox).
+WSJT-X reports all SNR in 2500 Hz reference bandwidth, so no bandwidth
+correction is needed — the decode thresholds already account for it.
+
+Profiles: wspr (baseline), qrp_portable, home_station, contest_cw,
+          contest_ssb, dxpedition
 """
 
 import argparse
@@ -75,6 +83,63 @@ VIABILITY = {
     'rtty':  -5.0,
     'ssb':    5.0,
 }
+
+# ── Station Profiles ─────────────────────────────────────────────────────────
+# Link budget: advantage_db = 10*log10(P_tx/0.2W) + G_tx + G_rx
+#
+# WSJT-X reports all SNR in 2500 Hz reference bandwidth (WSPR, FT8, etc.).
+# Decode thresholds already account for mode bandwidth. The profile only
+# adjusts for power + antenna above the WSPR 200 mW isotropic baseline.
+#
+# Profiles are intentionally comparable to VOACAP station presets so that
+# IONIS vs VOACAP comparisons are apples-to-apples.
+
+PROFILES = {
+    'wspr': {
+        'description': 'WSPR beacon (200 mW, isotropic) — baseline, no adjustment',
+        'tx_power_w': 0.2,
+        'tx_gain_dbi': 0.0,
+        'rx_gain_dbi': 0.0,
+    },
+    'qrp_portable': {
+        'description': 'QRP portable (5W, compromise antenna)',
+        'tx_power_w': 5.0,
+        'tx_gain_dbi': -3.0,
+        'rx_gain_dbi': 0.0,
+    },
+    'home_station': {
+        'description': 'Typical home station (100W, dipole both ends)',
+        'tx_power_w': 100.0,
+        'tx_gain_dbi': 2.0,
+        'rx_gain_dbi': 2.0,
+    },
+    'contest_cw': {
+        'description': 'Contest CW (1 kW, tribander both ends)',
+        'tx_power_w': 1000.0,
+        'tx_gain_dbi': 8.0,
+        'rx_gain_dbi': 8.0,
+    },
+    'contest_ssb': {
+        'description': 'Contest SSB (1.5 kW, stacked Yagis)',
+        'tx_power_w': 1500.0,
+        'tx_gain_dbi': 10.0,
+        'rx_gain_dbi': 10.0,
+    },
+    'dxpedition': {
+        'description': 'DXpedition (1 kW, vertical + ground gain on salt water)',
+        'tx_power_w': 1000.0,
+        'tx_gain_dbi': 3.0,
+        'rx_gain_dbi': 2.0,
+    },
+}
+
+
+def compute_station_advantage(profile_name):
+    """Compute link budget advantage in dB over WSPR baseline."""
+    p = PROFILES[profile_name]
+    power_db = 10.0 * math.log10(p['tx_power_w'] / 0.2)
+    return power_db + p['tx_gain_dbi'] + p['rx_gain_dbi']
+
 
 INSERT_BATCH = 500_000
 INFERENCE_BATCH = 50_000
@@ -452,8 +517,8 @@ def denormalize_predictions(z_scores, band_ids, norm_constants):
 
 def score_and_insert(client, features, meta, model, config, device,
                      norm_constants, mode_thresholds, run_id, run_timestamp,
-                     model_version, source):
-    """Run inference, compute metrics, insert results. Returns recall %."""
+                     model_version, source, profile_name, advantage_db):
+    """Run inference, apply link budget, insert results. Returns recall %."""
     n = len(features)
 
     # Inference
@@ -466,24 +531,27 @@ def score_and_insert(client, features, meta, model, config, device,
     # Denormalize Z-scores -> dB (WSPR scale)
     predicted_snr = denormalize_predictions(z_scores, meta['band'], norm_constants)
 
-    # Viability flags (waterfall)
-    ft8_viable  = (predicted_snr >= VIABILITY['ft8']).astype(np.uint8)
-    cw_viable   = (predicted_snr >= VIABILITY['cw']).astype(np.uint8)
-    rtty_viable = (predicted_snr >= VIABILITY['rtty']).astype(np.uint8)
-    ssb_viable  = (predicted_snr >= VIABILITY['ssb']).astype(np.uint8)
+    # Apply link budget: adjusted = model prediction + station advantage
+    adjusted_snr = predicted_snr + advantage_db
 
-    # Mode hit: vectorized lookup via pandas Series.map
+    # Viability flags use adjusted SNR (model + gearbox)
+    ft8_viable  = (adjusted_snr >= VIABILITY['ft8']).astype(np.uint8)
+    cw_viable   = (adjusted_snr >= VIABILITY['cw']).astype(np.uint8)
+    rtty_viable = (adjusted_snr >= VIABILITY['rtty']).astype(np.uint8)
+    ssb_viable  = (adjusted_snr >= VIABILITY['ssb']).astype(np.uint8)
+
+    # Mode hit uses adjusted SNR: vectorized lookup via pandas Series.map
     actual_modes_series = pd.Series(meta['actual_mode'])
     mode_thresh_arr = actual_modes_series.map(mode_thresholds).fillna(-20.0).values.astype(np.float32)
-    mode_hit = (predicted_snr >= mode_thresh_arr).astype(np.uint8)
+    mode_hit = (adjusted_snr >= mode_thresh_arr).astype(np.uint8)
 
-    # SNR error
+    # SNR error (raw model prediction vs actual — no link budget)
     snr_error = predicted_snr - meta['actual_snr']
 
     # Insert into ClickHouse
     print(f"  Inserting {n:,} results into validation.model_results...")
     column_names = [
-        'run_id', 'run_timestamp', 'model_version', 'source',
+        'run_id', 'run_timestamp', 'model_version', 'source', 'profile',
         'tx_grid_4', 'rx_grid_4', 'band', 'hour', 'month',
         'distance_km', 'azimuth',
         'actual_snr', 'actual_mode',
@@ -505,6 +573,7 @@ def score_and_insert(client, features, meta, model, config, device,
             [run_timestamp] * bs,
             [model_version] * bs,
             [source] * bs,
+            [profile_name] * bs,
             [str(g)[:4] for g in meta['tx_grid_4'][s]],
             [str(g)[:4] for g in meta['rx_grid_4'][s]],
             meta['band'][s].astype(int).tolist(),
@@ -539,23 +608,24 @@ def score_and_insert(client, features, meta, model, config, device,
     rmse = np.sqrt(np.mean(snr_error ** 2))
 
     print()
-    print(f"  Summary for {source}:")
+    print(f"  Summary for {source} (profile: {profile_name}, +{advantage_db:.1f} dB):")
     print(f"    Total scored:   {n:,}")
     print(f"    Mode hits:      {mode_hit.sum():,}")
     print(f"    Overall recall: {recall:.2f}%")
-    print(f"    Predicted SNR:  min={predicted_snr.min():.1f}, max={predicted_snr.max():.1f}, mean={predicted_snr.mean():.1f} dB")
+    print(f"    Model SNR:      min={predicted_snr.min():.1f}, max={predicted_snr.max():.1f}, mean={predicted_snr.mean():.1f} dB")
+    print(f"    Adjusted SNR:   min={adjusted_snr.min():.1f}, max={adjusted_snr.max():.1f}, mean={adjusted_snr.mean():.1f} dB")
     print(f"    SNR error:      bias={snr_error.mean():+.2f}, RMSE={rmse:.2f} dB")
     print()
 
     # Per-band recall
-    print(f"    {'Band':>6s}  {'Count':>10s}  {'Recall':>8s}  {'Pred SNR':>10s}  {'RMSE':>8s}")
+    print(f"    {'Band':>6s}  {'Count':>10s}  {'Recall':>8s}  {'Adj SNR':>10s}  {'RMSE':>8s}")
     print(f"    {'-'*48}")
     for band_id in sorted(BAND_NAMES.keys()):
         mask = meta['band'] == band_id
         if mask.sum() == 0:
             continue
         b_recall = 100.0 * mode_hit[mask].sum() / mask.sum()
-        b_mean = predicted_snr[mask].mean()
+        b_mean = adjusted_snr[mask].mean()
         b_rmse = np.sqrt(np.mean(snr_error[mask] ** 2))
         print(f"    {BAND_NAMES[band_id]:>6s}  {mask.sum():>10,}  {b_recall:>7.2f}%  {b_mean:>+9.1f} dB  {b_rmse:>7.2f}")
     print()
@@ -585,6 +655,9 @@ def main():
                         help='Ground truth source to score against')
     parser.add_argument('--limit', type=int, default=0,
                         help='Max rows to score (0 = all)')
+    parser.add_argument('--profile', default='wspr',
+                        choices=list(PROFILES.keys()),
+                        help='Station profile for link budget (default: wspr)')
     args = parser.parse_args()
 
     # Load config
@@ -597,12 +670,18 @@ def main():
     model_version = config["version"]
     checkpoint_path = os.path.join(config_dir, config["checkpoint"])
 
+    # Compute station advantage
+    advantage_db = compute_station_advantage(args.profile)
+    profile_info = PROFILES[args.profile]
+
     print("=" * 70)
     print(f"  IONIS Batch Scorer -- {model_version}")
     print("=" * 70)
     print(f"  Config:     {config_path}")
     print(f"  Checkpoint: {checkpoint_path}")
     print(f"  Source:     {args.source}")
+    print(f"  Profile:    {args.profile} (+{advantage_db:.1f} dB)")
+    print(f"              {profile_info['power_w']}W, TX {profile_info['gain_tx_dbi']} dBi, RX {profile_info['gain_rx_dbi']} dBi")
     print(f"  Limit:      {args.limit if args.limit else 'all'}")
     print()
 
@@ -676,16 +755,17 @@ def main():
     recall = score_and_insert(
         client, features, meta, model, config, device,
         norm_constants, mode_thresholds, run_id, run_timestamp,
-        model_version, args.source,
+        model_version, args.source, args.profile, advantage_db,
     )
 
     client.close()
 
     print("=" * 70)
-    print(f"  Run ID:  {run_id}")
-    print(f"  Source:  {args.source}")
-    print(f"  Scored:  {len(features):,} paths")
-    print(f"  Recall:  {recall:.2f}%")
+    print(f"  Run ID:   {run_id}")
+    print(f"  Source:   {args.source}")
+    print(f"  Profile:  {args.profile} (+{advantage_db:.1f} dB)")
+    print(f"  Scored:   {len(features):,} paths")
+    print(f"  Recall:   {recall:.2f}%")
     print("=" * 70)
 
 
