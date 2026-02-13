@@ -19,7 +19,7 @@ Requires:       ionis-core >= 3.0.0
 %description
 IONIS (Ionospheric Neural Inference System) training and analysis scripts.
 PyTorch-based model predicting HF SNR from WSPR and solar features using
-IonisV12Gate architecture (V20 production).
+IonisGate architecture (V20 production).
 
 Scripts:
   - train_v2_pilot.py:       Training script (queries ClickHouse, builds features, trains)
@@ -65,7 +65,7 @@ install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
 
 * Wed Feb 11 2026 Greg Beam <ki7mt@yahoo.com> - 2.4.0-1
 - V20 production release
-- Update description: ResidualBlock → IonisV12Gate (V20 production)
+- Update description: ResidualBlock → IonisGate (V20 production)
 
 * Sun Feb 08 2026 Greg Beam <ki7mt@yahoo.com> - 2.3.1-1
 - Medallion architecture: gold_* table references

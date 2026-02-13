@@ -192,7 +192,7 @@ def main():
 
     # Baselines from config
     voacap = config.baselines.get("voacap", 75.82)
-    prev_version = config.baselines.get("previous_version", "v16")
+    prev_version = config.baselines.get("previous_version", "v20")
     prev_recall = config.baselines.get("previous_recall", 96.38)
 
     print("  Baselines:")

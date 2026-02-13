@@ -335,14 +335,6 @@ def get_optimizer_groups(model, trunk_lr=1e-5, scaler_lr=5e-5, sidecar_lr=1e-3):
     ]
 
 
-# ── Backward Compatibility Aliases ───────────────────────────────────────────
-# TODO: Remove once all version scripts are updated to use new names
-IonisV12Gate = IonisGate
-init_v16_defibrillator = init_defibrillator
-clamp_v16_sidecars = clamp_sidecars
-get_v16_optimizer_groups = get_optimizer_groups
-
-
 # ── Dataset ──────────────────────────────────────────────────────────────────
 
 class SignatureDataset(Dataset):
@@ -415,7 +407,7 @@ def load_combined_data(config):
     # Load each source
     wspr_df = load_source_data(client, "wspr.signatures_v2_terrestrial", wspr_sample)
 
-    # Guard: skip RBN Full when sample == 0 (V16 recipe)
+    # Guard: skip RBN Full when sample == 0 (V20 recipe)
     if rbn_full_sample > 0:
         rbn_full_df = load_source_data(client, "rbn.signatures", rbn_full_sample)
     else:

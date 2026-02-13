@@ -5,7 +5,7 @@ VOACAP Batch Runner — Step I Validation
 
 Runs ~965K unique HF circuits through voacapl and stores results in
 ClickHouse (validation.step_i_voacap) for head-to-head comparison
-with IONIS V12 predictions.
+with IONIS predictions.
 
 Workflow:
     1. Read paths from validation.step_i_paths (ClickHouse)
@@ -42,7 +42,7 @@ from pathlib import Path
 VOACAPL_BIN = "/usr/local/bin/voacapl"
 ITSHFBC_DIR = Path.home() / "itshfbc"
 
-# Mode-dependent band-open thresholds (must match validate_v12.py)
+# Mode-dependent band-open thresholds (must match validate.py)
 MODE_THRESHOLDS = {
     "DG": -22.0,
     "CW": -22.0,
@@ -346,7 +346,7 @@ def insert_results_to_clickhouse(
 # ---------------------------------------------------------------------------
 
 def compute_metrics(results: list):
-    """Compute and print recall metrics matching validate_v12.py format."""
+    """Compute and print recall metrics matching validate.py format."""
 
     total = len(results)
     if total == 0:

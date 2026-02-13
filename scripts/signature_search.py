@@ -5,7 +5,7 @@ signature_search.py — Step G: kNN Signature Search Layer
 Given current conditions (path, band, hour, month, SFI, Kp), find the K nearest
 historical signatures from wspr.signatures_v1 (93.4M rows) and report what happened.
 
-Complements oracle_v12 (physics-based neural prediction) with historical evidence.
+Complements oracle (physics-based neural prediction) with historical evidence.
 
 Usage:
   python signature_search.py --tx FN31 --rx JO21 --band 20m --hour 14 --month 6
@@ -121,7 +121,7 @@ class SearchResult:
 class SignatureSearch:
     """kNN search over wspr.signatures_v1 via ClickHouse SQL."""
 
-    # Condition thresholds — same as oracle_v12.py:354-363
+    # Condition thresholds — same as oracle.py:354-363
     CONDITION_THRESHOLDS = [
         (-10, "EXCELLENT (Voice/SSB)"),
         (-15, "GOOD (CW/Digital)"),
@@ -468,12 +468,12 @@ def run_tests(host: str = None):
           delta >= 0,
           f"quiet={r_quiet.median_snr:+.1f}, storm={r_storm.median_snr:+.1f}, delta={delta:+.1f} dB")
 
-    # Test 5: Cross-validation with oracle_v12
-    print(f"\n  Test 5: Cross-validation with oracle_v12")
+    # Test 5: Cross-validation with oracle
+    print(f"\n  Test 5: Cross-validation with oracle")
     try:
         import importlib.util
-        oracle_path = __file__.replace("signature_search.py", "oracle_v12.py")
-        spec = importlib.util.spec_from_file_location("oracle_v12", oracle_path)
+        oracle_path = __file__.replace("signature_search.py", "oracle.py")
+        spec = importlib.util.spec_from_file_location("oracle", oracle_path)
         oracle_mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(oracle_mod)
         oracle = oracle_mod.IonisOracle()
@@ -489,7 +489,7 @@ def run_tests(host: str = None):
               diff <= 5.0,
               f"oracle={pred.snr_db:+.1f}, sig={r_sig.median_snr:+.1f}, diff={diff:.1f} dB")
     except Exception as e:
-        check("Oracle cross-validation (skipped)", True, f"oracle_v12 not available: {e}")
+        check("Oracle cross-validation (skipped)", True, f"oracle not available: {e}")
 
     # Test 6: Sparse path graceful degradation
     print(f"\n  Test 6: Sparse Path Graceful Degradation")

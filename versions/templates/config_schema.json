@@ -15,7 +15,7 @@
     },
     "architecture": {
       "type": "string",
-      "description": "Model class name (e.g., 'IonisV12Gate')"
+      "description": "Model class name (e.g., 'IonisGate')"
     },
     "normalization": {
       "type": "string",

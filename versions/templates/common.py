@@ -141,8 +141,8 @@ def _gate(x):
     return 0.5 + 1.5 * torch.sigmoid(x)
 
 
-class IonisV12Gate(nn.Module):
-    """IONIS V12+ architecture with gated dual monotonic sidecars."""
+class IonisGate(nn.Module):
+    """IONIS architecture with gated dual monotonic sidecars."""
 
     def __init__(self, dnn_dim: int = 11, sidecar_hidden: int = 8):
         super().__init__()
@@ -216,7 +216,7 @@ class IonisV12Gate(nn.Module):
 
 # Architecture registry
 ARCHITECTURES = {
-    "IonisV12Gate": IonisV12Gate,
+    "IonisGate": IonisGate,
 }
 
 

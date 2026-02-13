@@ -4,7 +4,7 @@ PyTorch training and validation for the **IONIS** (Ionospheric Neural Inference 
 
 ## Current Model
 
-**IONIS V20 Production** — Golden Master (IonisV12Gate architecture)
+**IONIS V20 Production** — Golden Master (IonisGate architecture)
 - 203,573 parameters
 - Trained on WSPR (floor) + DXpedition (rare paths) + Contest (ceiling)
 - Config-driven: `versions/v20/config_v20.json`
@@ -23,18 +23,15 @@ PyTorch training and validation for the **IONIS** (Ionospheric Neural Inference 
 ionis-training/
 ├── versions/           # Self-contained version folders
 │   ├── v20/           # Production golden master
-│   ├── v16/           # Contest anchoring (reference)
-│   ├── v15/           # Clean filter + DXpedition
-│   ├── v14/           # WSPR-only A/B test
-│   ├── v13/           # + RBN DXpedition
-│   ├── v12/           # WSPR signatures (baseline)
-│   └── archive/       # v10, v11, and experiments
+│   ├── common/        # Shared training infrastructure
+│   └── templates/     # New version templates
 ├── scripts/           # Shared utilities
 │   ├── signature_search.py   # kNN search over 93.4M signatures
 │   ├── predict.py            # Generic prediction interface
 │   ├── voacap_batch_runner.py # VOACAP comparison harness
 │   └── coverage_heatmap.py   # Grid coverage visualization
-├── models/            # Canonical checkpoints (ionis_vxx.pth)
+├── tools/             # Development tools
+├── results/           # Validation results
 ├── GOAL.md           # Project vision
 └── README.md         # This file
 ```
@@ -54,7 +51,7 @@ versions/v20/
 ## Architecture
 
 ```
-IonisV12Gate (203,573 params)
+IonisGate (203,573 params)
 ├── Trunk: 11 geography/time features → 512 → 256
 ├── Base Head: 256 → 128 → 1 (baseline SNR)
 ├── Sun Scaler Head: 256 → 64 → 1 (geographic gate)
@@ -64,17 +61,6 @@ IonisV12Gate (203,573 params)
 ```
 
 **Key innovation:** Gated monotonic sidecars enforce physics constraints (SFI+, Kp-) while allowing geographic modulation of sensitivity.
-
-## Model Evolution
-
-| Version | Innovation | Key Metric |
-|---------|------------|------------|
-| V12 | Aggregated signatures | — |
-| V13 | + RBN DXpedition | 85.34% recall |
-| V14 | WSPR-only (A/B test) | 76.00% recall |
-| V15 | Clean balloon filter | 86.89% recall |
-| V16 | + Contest anchoring | 96.38% recall |
-| **V20** | **Golden Master** | **Pearson +0.4879** |
 
 ## Quick Start
 

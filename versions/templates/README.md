@@ -12,7 +12,7 @@ python versions/templates/verify_template.py v18
 python versions/templates/validate_template.py v18
 
 # Works with any version that has a config.json
-python versions/templates/verify_template.py v16
+python versions/templates/verify_template.py v20
 ```
 
 ## Files
@@ -32,7 +32,7 @@ Each version needs a `config.json` in its folder:
 {
   "version": "v18",
   "checkpoint": "ionis_v18.pth",
-  "architecture": "IonisV12Gate",
+  "architecture": "IonisGate",
   "normalization": "global",
   "norm_keys": {
     "mean": "global_mean",
@@ -52,7 +52,7 @@ Each version needs a `config.json` in its folder:
   },
   "baselines": {
     "voacap": 75.82,
-    "previous_version": "v16",
+    "previous_version": "v20",
     "previous_recall": 96.38
   }
 }
@@ -80,6 +80,6 @@ Each version needs a `config.json` in its folder:
 ## Architecture Registry
 
 Currently supported architectures in `common.py`:
-- `IonisV12Gate` — V12-V18 (203,573 params)
+- `IonisGate` — V20-V18 (203,573 params)
 
 To add new architectures, update `ARCHITECTURES` dict in `common.py`.

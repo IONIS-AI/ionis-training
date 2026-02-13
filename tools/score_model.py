@@ -54,7 +54,7 @@ COMMON_DIR = os.path.join(REPO_DIR, "versions", "common")
 sys.path.insert(0, COMMON_DIR)
 
 from train_common import (
-    IonisV12Gate,
+    IonisGate,
     grid4_to_latlon,
     grid4_to_latlon_arrays,
     engineer_features,
@@ -812,7 +812,7 @@ def main():
     # Load model
     print(f"  Loading model...")
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    model = IonisV12Gate(
+    model = IonisGate(
         dnn_dim=config["model"]["dnn_dim"],
         sidecar_hidden=config["model"]["sidecar_hidden"],
         sfi_idx=config["model"]["sfi_idx"],

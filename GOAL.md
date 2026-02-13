@@ -119,7 +119,7 @@ IONIS builds on that foundation with three complementary advantages:
 
 ```
 V2 → V6 (monotonic) → V7 (lobotomy) → V8 (sidecar) →
-V9 (dual mono) → V10 (final) → V11 (gates) → V12 (signatures) → V13 (combined)
+V9 (dual mono) → V10 (final) → V11 (gates) → V20 (signatures) → V13 (combined)
 ```
 
 Each version added architectural improvements while preserving physics constraints.
@@ -138,7 +138,7 @@ V13 is the first multi-source hybrid, bridging WSPR and RBN data.
 | Step | Description | Status |
 |------|-------------|--------|
 | D | Infrastructure complete | ✓ |
-| E | Golden Burn (V12 signatures) | ✓ |
+| E | Golden Burn (V20 signatures) | ✓ |
 | F | Aggregated Signatures | ✓ |
 | G | Signature Search Layer | ✓ |
 | H | Contest Log Ingest | ✓ |

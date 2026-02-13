@@ -4,7 +4,7 @@
   "checkpoint": "ionis_v20.pth",
 
   "model": {
-    "architecture": "IonisV12Gate",
+    "architecture": "IonisGate",
     "dnn_dim": 11,
     "hidden_dim": 256,
     "sidecar_hidden": 8,
