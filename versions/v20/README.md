@@ -44,7 +44,7 @@ These constraints are **non-negotiable**. They are what killed every V19 variant
 ## Running
 
 ```bash
-cd /Users/gbeam/workspace/ki7mt-ai-lab/ki7mt-ai-lab-training
+cd /Users/gbeam/workspace/ionis-ai/ionis-training
 python versions/v20/train_v20.py
 ```
 

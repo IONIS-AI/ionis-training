@@ -29,7 +29,7 @@ V16 adds contest log anchoring to teach the model the "ceiling" of propagation:
 - [x] Sensitivity tests: `python test_v16.py`
 - [x] Oracle test suite: `python oracle_v16.py --test`
 - [x] Update repo README.md
-- [x] Update ki7mt-ai-lab-docs validation pages
+- [x] Update ionis-docs validation pages
 - [x] Write REPORT_v16.md
 
 ## Files

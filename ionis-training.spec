@@ -1,22 +1,25 @@
-Name:           ki7mt-ai-lab-training
-Version:        2.4.0
-Release:        2%{?dist}
-Summary:        IONIS V2 training scripts for KI7MT AI Lab
+Name:           ionis-training
+Version:        3.0.0
+Release:        1%{?dist}
+Summary:        IONIS training and analysis scripts
 
 License:        GPL-3.0-or-later
-URL:            https://github.com/KI7MT/ki7mt-ai-lab-training
-Source0:        https://github.com/KI7MT/%{name}/archive/v%{version}.tar.gz
+URL:            https://github.com/IONIS-AI/ionis-training
+Source0:        https://github.com/IONIS-AI/%{name}/archive/v%{version}.tar.gz
 
 BuildArch:      noarch
 
+Obsoletes:      ki7mt-ai-lab-training < 3.0.0
+Provides:       ki7mt-ai-lab-training
+
 Requires:       python3 >= 3.9
 Requires:       python3-pip
-Requires:       ki7mt-ai-lab-core >= 2.3.0
+Requires:       ionis-core >= 3.0.0
 
 %description
-IONIS (Ionospheric Neural Inference System) training and analysis scripts
-for the KI7MT AI Lab. PyTorch-based model predicting HF SNR from WSPR and
-solar features using IonisV12Gate architecture (V20 production).
+IONIS (Ionospheric Neural Inference System) training and analysis scripts.
+PyTorch-based model predicting HF SNR from WSPR and solar features using
+IonisV12Gate architecture (V20 production).
 
 Scripts:
   - train_v2_pilot.py:       Training script (queries ClickHouse, builds features, trains)
@@ -50,15 +53,21 @@ install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
 %{_datadir}/%{name}/Modelfile
 
 %changelog
-* Wed Feb 12 2026 Greg Beam <ki7mt@yahoo.com> - 2.4.0-2
+* Fri Feb 13 2026 Greg Beam <ki7mt@yahoo.com> - 3.0.0-1
+- Rename package: ki7mt-ai-lab-training → ionis-training
+- Move to IONIS-AI GitHub org
+- Require ionis-core >= 3.0.0
+- Add Obsoletes/Provides for seamless RPM upgrade
+
+* Thu Feb 12 2026 Greg Beam <ki7mt@yahoo.com> - 2.4.0-2
 - Remove .pth checkpoints from package (moved to ZFS archive-pool/ionis-models)
 - RPM now ships scripts only — model artifacts managed separately
 
-* Tue Feb 11 2026 Greg Beam <ki7mt@yahoo.com> - 2.4.0-1
+* Wed Feb 11 2026 Greg Beam <ki7mt@yahoo.com> - 2.4.0-1
 - V20 production release
 - Update description: ResidualBlock → IonisV12Gate (V20 production)
 
-* Sat Feb 08 2026 Greg Beam <ki7mt@yahoo.com> - 2.3.1-1
+* Sun Feb 08 2026 Greg Beam <ki7mt@yahoo.com> - 2.3.1-1
 - Medallion architecture: gold_* table references
 - Align version across all lab packages at 2.3.1
 

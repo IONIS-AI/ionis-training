@@ -1,32 +1,33 @@
-# KI7MT AI Lab — Training
+# IONIS — Training
 
 PyTorch training and validation for the **IONIS** (Ionospheric Neural Inference System) propagation model.
 
 ## Current Model
 
-**IONIS V16 Contest** — Curriculum Learning with Contest Anchoring
-- 203,573 parameters (IonisV12Gate architecture)
-- Trained on WSPR (floor) + RBN DXpedition (rare paths) + Contest (ceiling)
-- Curriculum learning: -28 dB floor first, then +10 dB ceiling
+**IONIS V20 Production** — Golden Master (IonisV12Gate architecture)
+- 203,573 parameters
+- Trained on WSPR (floor) + DXpedition (rare paths) + Contest (ceiling)
+- Config-driven: `versions/v20/config_v20.json`
 
 | Metric | Value |
 |--------|-------|
-| Overall Recall | **96.38%** (+20.56 pp vs VOACAP) |
-| SSB Recall | **98.40%** |
-| Pearson | +0.4873 |
-| RMSE | 0.860σ |
-| Oracle Tests | 35/35 PASS |
+| Pearson | **+0.4879** |
+| RMSE | 0.862σ |
+| SFI sidecar | +0.482σ |
+| Kp sidecar | +3.487σ |
+| PSK Reporter recall | 84.14% |
 
 ## Repository Structure
 
 ```
-ki7mt-ai-lab-training/
+ionis-training/
 ├── versions/           # Self-contained version folders
-│   ├── v12/           # WSPR signatures (baseline)
-│   ├── v13/           # + RBN DXpedition
-│   ├── v14/           # WSPR-only A/B test
+│   ├── v20/           # Production golden master
+│   ├── v16/           # Contest anchoring (reference)
 │   ├── v15/           # Clean filter + DXpedition
-│   ├── v16/           # + Contest anchoring (current)
+│   ├── v14/           # WSPR-only A/B test
+│   ├── v13/           # + RBN DXpedition
+│   ├── v12/           # WSPR signatures (baseline)
 │   └── archive/       # v10, v11, and experiments
 ├── scripts/           # Shared utilities
 │   ├── signature_search.py   # kNN search over 93.4M signatures
@@ -40,15 +41,14 @@ ki7mt-ai-lab-training/
 
 Each version folder is self-contained:
 ```
-versions/v16/
-├── train_v16.py       # Training script
-├── validate_v16.py    # Step I recall validation
-├── verify_v16.py      # Physics verification
-├── test_v16.py        # Sensitivity analysis
-├── oracle_v16.py      # Production oracle (35 tests)
-├── ionis_v16.pth      # Model checkpoint
-├── README.md          # Checklist and summary
-└── REPORT_v16.md      # Final report
+versions/v20/
+├── train_v20.py       # Training script
+├── validate_v20.py    # Step I recall validation
+├── verify_v20.py      # Physics verification
+├── test_v20.py        # Sensitivity analysis
+├── config_v20.json    # All hyperparameters
+├── ionis_v20.pth      # Model checkpoint
+└── README.md          # Checklist and summary
 ```
 
 ## Architecture
@@ -67,13 +67,14 @@ IonisV12Gate (203,573 params)
 
 ## Model Evolution
 
-| Version | Innovation | Recall |
-|---------|------------|--------|
+| Version | Innovation | Key Metric |
+|---------|------------|------------|
 | V12 | Aggregated signatures | — |
-| V13 | + RBN DXpedition | 85.34% |
-| V14 | WSPR-only (A/B test) | 76.00% |
-| V15 | Clean balloon filter | 86.89% |
-| **V16** | **+ Contest anchoring** | **96.38%** |
+| V13 | + RBN DXpedition | 85.34% recall |
+| V14 | WSPR-only (A/B test) | 76.00% recall |
+| V15 | Clean balloon filter | 86.89% recall |
+| V16 | + Contest anchoring | 96.38% recall |
+| **V20** | **Golden Master** | **Pearson +0.4879** |
 
 ## Quick Start
 
@@ -82,14 +83,13 @@ IonisV12Gate (203,573 params)
 - ClickHouse access (10.60.1.1 via DAC or 192.168.1.90 LAN)
 - Required tables: `wspr.signatures_v2_terrestrial`, `rbn.dxpedition_signatures`, `contest.signatures`
 
-### Reproduce V16
+### Reproduce V20
 ```bash
-cd versions/v16
-python train_v16.py          # ~3.5 hours on M3 Ultra
-python validate_v16.py       # Step I recall (96.38%)
-python verify_v16.py         # Physics verification
-python test_v16.py           # Sensitivity analysis
-python oracle_v16.py --test  # 35/35 tests
+cd versions/v20
+python train_v20.py          # ~4h 16m on M3 Ultra
+python validate_v20.py       # Step I recall
+python verify_v20.py         # Physics verification
+python test_v20.py           # Sensitivity analysis
 ```
 
 ## Data Sources
@@ -104,10 +104,10 @@ python oracle_v16.py --test  # 35/35 tests
 
 | Repository | Purpose |
 |------------|---------|
-| [ki7mt-ai-lab-docs](https://github.com/KI7MT/ki7mt-ai-lab-docs) | Documentation site |
-| [ki7mt-ai-lab-apps](https://github.com/KI7MT/ki7mt-ai-lab-apps) | Go data ingesters |
-| [ki7mt-ai-lab-core](https://github.com/KI7MT/ki7mt-ai-lab-core) | DDL schemas, SQL |
-| [ki7mt-ai-lab-cuda](https://github.com/KI7MT/ki7mt-ai-lab-cuda) | CUDA signature engine |
+| [ionis-core](https://github.com/IONIS-AI/ionis-core) | DDL schemas, SQL |
+| [ionis-apps](https://github.com/IONIS-AI/ionis-apps) | Go data ingesters |
+| [ionis-cuda](https://github.com/IONIS-AI/ionis-cuda) | CUDA signature engine |
+| [ionis-docs](https://github.com/IONIS-AI/ionis-docs) | Documentation site |
 
 ## License
 
@@ -116,7 +116,3 @@ GPLv3 — See [COPYING](COPYING) for details.
 ## Author
 
 Greg Beam, KI7MT
-
----
-
-*Training infrastructure for HF propagation prediction based on real-world observations.*

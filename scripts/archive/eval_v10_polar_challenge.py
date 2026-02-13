@@ -39,7 +39,7 @@ TRAINING_DIR = os.path.dirname(SCRIPT_DIR)
 # --- Paths ---
 CSV_PATH = os.path.join(TRAINING_DIR, "data", "training_v6_clean.csv")
 MODEL_PATH = os.path.join(TRAINING_DIR, "models", "ionis_v10_final.pth")
-DOCS_DIR = os.path.join(os.path.dirname(TRAINING_DIR), "ki7mt-ai-lab-docs")
+DOCS_DIR = os.path.join(os.path.dirname(TRAINING_DIR), "ionis-docs")
 REPORT_PATH = os.path.join(
     DOCS_DIR, "docs", "validation", "polar_tests", "IONIS-V10-POL-01.md"
 )

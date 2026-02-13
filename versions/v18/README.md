@@ -81,7 +81,7 @@ After training, verify:
 ## Training Command
 
 ```bash
-cd /Users/gbeam/workspace/ki7mt-ai-lab/ki7mt-ai-lab-training
+cd /Users/gbeam/workspace/ionis-ai/ionis-training
 .venv/bin/python versions/v18/train_v18.py 2>&1 | tee versions/v18/train_v18.log
 ```
 
