@@ -30,7 +30,7 @@ TRAINING_DIR = os.path.dirname(VERSIONS_DIR)
 COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
 sys.path.insert(0, COMMON_DIR)
 
-from train_common import IonisV12Gate, _gate_v16
+from train_common import IonisGate, _gate
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -87,8 +87,8 @@ def decompose(model, x):
         base_snr = model.base_head(trunk_out).item()
         sun_logit = model.sun_scaler_head(trunk_out)
         storm_logit = model.storm_scaler_head(trunk_out)
-        sun_gate = _gate_v16(sun_logit).item()
-        storm_gate = _gate_v16(storm_logit).item()
+        sun_gate = _gate(sun_logit).item()
+        storm_gate = _gate(storm_logit).item()
         sun_raw = model.sun_sidecar(x_sfi).item()
         storm_raw = model.storm_sidecar(x_kp).item()
     sun_contrib = sun_gate * sun_raw
@@ -112,7 +112,7 @@ def test_physics():
     print(f"Loading {MODEL_PATH}...")
     checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=DEVICE)
 
-    model = IonisV12Gate(
+    model = IonisGate(
         dnn_dim=DNN_DIM,
         sidecar_hidden=SIDECAR_HIDDEN,
         sfi_idx=SFI_IDX,
@@ -213,8 +213,8 @@ def test_physics():
         trunk_out = model.trunk(x_deep)
         sun_logit = model.sun_scaler_head(trunk_out)
         storm_logit = model.storm_scaler_head(trunk_out)
-        sun_gates = _gate_v16(sun_logit)
-        storm_gates = _gate_v16(storm_logit)
+        sun_gates = _gate(sun_logit)
+        storm_gates = _gate(storm_logit)
 
     sun_min = sun_gates.min().item()
     sun_max = sun_gates.max().item()
@@ -322,7 +322,7 @@ def test_physics():
         print(f"    Sun gate range:      [{sun_min:.4f}, {sun_max:.4f}]")
         print(f"    Storm gate range:    [{storm_min:.4f}, {storm_max:.4f}]")
         print()
-        print("  V16 Reference:")
+        print("  BASELINE Reference:")
         print(f"    Kp storm cost:  +3.445 sigma")
         print(f"    SFI benefit:    +0.478 sigma")
         print()

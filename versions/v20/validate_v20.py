@@ -6,7 +6,7 @@ Queries 1M contest paths from validation.step_i_paths, runs V20 inference,
 denormalizes Z-scores to dB using per-band WSPR norm constants,
 applies mode thresholds, and reports recall.
 
-V20 Golden Master: V16 replication in clean codebase.
+V20 Golden Master: V20 replication in clean codebase.
 
 Baselines:
 - VOACAP:    75.82%
@@ -32,7 +32,7 @@ VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
 COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
 sys.path.insert(0, COMMON_DIR)
 
-from train_common import IonisV12Gate
+from train_common import IonisGate
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ def main():
     # Load model
     print(f"Loading model from {MODEL_PATH}...")
     checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=DEVICE)
-    model = IonisV12Gate(
+    model = IonisGate(
         dnn_dim=DNN_DIM,
         sidecar_hidden=SIDECAR_HIDDEN,
         sfi_idx=SFI_IDX,

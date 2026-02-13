@@ -34,7 +34,7 @@ VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
 COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
 sys.path.insert(0, COMMON_DIR)
 
-from train_common import IonisV12Gate, grid4_to_latlon
+from train_common import IonisGate, grid4_to_latlon
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -71,9 +71,9 @@ THRESHOLDS = {
 
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-# V16 reference values for comparison
-V16_FT8_RECALL = 98.47
-V16_OVERALL_RECALL = 84.14
+# BASELINE reference values for comparison
+BASELINE_FT8_RECALL = 98.47
+BASELINE_OVERALL_RECALL = 84.14
 
 
 # ── Local Utilities ──────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ def validate(limit=100000, mode='FT8'):
     # Load model
     print(f"Loading V20 model...")
     checkpoint = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
-    model = IonisV12Gate(
+    model = IonisGate(
         dnn_dim=DNN_DIM,
         sidecar_hidden=SIDECAR_HIDDEN,
         sfi_idx=SFI_IDX,
@@ -354,9 +354,9 @@ def validate(limit=100000, mode='FT8'):
     print()
     print("=" * 60)
 
-    # Summary with V16 comparison
+    # Summary with BASELINE comparison
     print("\nSUMMARY:")
-    print(f"  V16 Reference: FT8 recall {V16_FT8_RECALL}%, overall recall {V16_OVERALL_RECALL}%")
+    print(f"  BASELINE Reference: FT8 recall {BASELINE_FT8_RECALL}%, overall recall {BASELINE_OVERALL_RECALL}%")
     print()
 
     if pearson > 0.20 and recall > 0.75:
@@ -369,10 +369,10 @@ def validate(limit=100000, mode='FT8'):
         if recall <= 0.75:
             print(f"    - Recall below threshold (75%)")
 
-    # V16 comparison
+    # BASELINE comparison
     if mode == 'FT8':
-        ft8_delta = 100*recall - V16_FT8_RECALL
-        print(f"\n  V20 vs V16 FT8 recall: {ft8_delta:+.2f} pp ({100*recall:.2f}% vs {V16_FT8_RECALL}%)")
+        ft8_delta = 100*recall - BASELINE_FT8_RECALL
+        print(f"\n  V20 vs BASELINE FT8 recall: {ft8_delta:+.2f} pp ({100*recall:.2f}% vs {BASELINE_FT8_RECALL}%)")
 
 
 def main():

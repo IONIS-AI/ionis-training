@@ -33,7 +33,7 @@ VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
 COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
 sys.path.insert(0, COMMON_DIR)
 
-from train_common import IonisV12Gate, _gate_v16
+from train_common import IonisGate, _gate
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -77,10 +77,10 @@ REF_MONTH = 6
 REF_SFI = 150.0
 REF_KP = 2.0
 
-# V16 reference values for comparison
-V16_KP_STORM = 3.445   # sigma
-V16_SFI_BENEFIT = 0.478  # sigma
-V16_PEARSON = 0.4873
+# BASELINE reference values for comparison
+BASELINE_KP_STORM = 3.445   # sigma
+BASELINE_SFI_BENEFIT = 0.478  # sigma
+BASELINE_PEARSON = 0.4873
 
 
 # ── Feature Builder ──────────────────────────────────────────────────────────
@@ -130,8 +130,8 @@ def decompose(x):
         base_snr = model.base_head(trunk_out)
         sun_logit = model.sun_scaler_head(trunk_out)
         storm_logit = model.storm_scaler_head(trunk_out)
-        sun_gate = _gate_v16(sun_logit)
-        storm_gate = _gate_v16(storm_logit)
+        sun_gate = _gate(sun_logit)
+        storm_gate = _gate(storm_logit)
         sun_raw = model.sun_sidecar(x_sfi)
         storm_raw = model.storm_sidecar(x_kp)
         sun_contrib = sun_gate * sun_raw
@@ -154,7 +154,7 @@ def decompose(x):
 print(f"Loading {MODEL_PATH}...")
 checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=DEVICE)
 
-model = IonisV12Gate(
+model = IonisGate(
     dnn_dim=DNN_DIM,
     sidecar_hidden=SIDECAR_HIDDEN,
     sfi_idx=SFI_IDX,
@@ -190,7 +190,7 @@ for sfi_val in [60, 80, 100, 120, 150, 180, 200, 250, 300]:
 
 sfi_delta = sfi_snrs[-1] - sfi_snrs[0]
 print(f"\n  SFI 60->300 delta: {sfi_delta:+.3f} sigma ({sfi_delta*SIGMA_TO_DB:+.1f} dB)")
-print(f"  V16 reference:     +{V16_SFI_BENEFIT:.3f} sigma")
+print(f"  BASELINE reference:     +{BASELINE_SFI_BENEFIT:.3f} sigma")
 if sfi_delta > 0:
     print(f"  CORRECT: Higher SFI improves SNR")
 else:
@@ -209,7 +209,7 @@ for kp_val in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
 
 kp_delta = kp_snrs[0] - kp_snrs[-1]
 print(f"\n  Kp 0->9 storm cost: {kp_delta:+.3f} sigma ({kp_delta*SIGMA_TO_DB:+.1f} dB)")
-print(f"  V16 reference:      +{V16_KP_STORM:.3f} sigma")
+print(f"  BASELINE reference:      +{BASELINE_KP_STORM:.3f} sigma")
 if kp_delta > 0:
     print(f"  CORRECT: Higher Kp degrades SNR")
 else:
@@ -337,10 +337,10 @@ if sfi_benefit != 0:
 print(f"\n  SFI monotonicity: {'CORRECT' if sfi_benefit > 0 else 'INVERTED'}")
 print(f"  Kp monotonicity:  {'CORRECT' if storm_cost > 0 else 'INVERTED'}")
 
-print(f"\n  V16 Reference:")
-print(f"    SFI benefit:    +{V16_SFI_BENEFIT:.3f} sigma")
-print(f"    Kp storm cost:  +{V16_KP_STORM:.3f} sigma")
-print(f"    Pearson:        +{V16_PEARSON:.4f}")
+print(f"\n  BASELINE Reference:")
+print(f"    SFI benefit:    +{BASELINE_SFI_BENEFIT:.3f} sigma")
+print(f"    Kp storm cost:  +{BASELINE_KP_STORM:.3f} sigma")
+print(f"    Pearson:        +{BASELINE_PEARSON:.4f}")
 
 # Check against thresholds
 kp_min = CONFIG["validation"]["kp_storm_min"]

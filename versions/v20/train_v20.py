@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 """
-train_v20.py — IONIS V20 "Golden Master" Replication
-
-V16 Architecture + V16 Data Recipe + Config-Driven Infrastructure.
+train_v20.py — IONIS V20 Golden Master Training
 
 All configuration loaded from config_v20.json.
 Architecture, features, dataset, and data loading from common/train_common.py.
 
-THE V16 PHYSICS LAWS (non-negotiable):
-    1. Architecture: IonisV12Gate (context-aware gates from trunk output)
+Architecture constraints (non-negotiable):
+    1. Architecture: IonisGate (context-aware gates from trunk output)
     2. Loss: HuberLoss(delta=1.0) — robust to synthetic anchors
     3. Regularization: Gate variance loss — forces context sensitivity
     4. Init: Defibrillator — weights uniform(0.8-1.2), fc2.bias=-10
     5. Constraint: Weight clamp [0.5, 2.0] after EVERY step
-    6. Data: V16 recipe (WSPR + RBN-DX + Contest, NO RBN-Full)
 
 Success criteria: Pearson > +0.48, Kp > +3.0σ, SFI > +0.4σ
 """
@@ -39,12 +36,12 @@ VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, VERSIONS_DIR)
 
 from common.train_common import (
-    IonisV12Gate,
+    IonisGate,
     SignatureDataset,
     engineer_features,
-    init_v16_defibrillator,
-    clamp_v16_sidecars,
-    get_v16_optimizer_groups,
+    init_defibrillator,
+    clamp_sidecars,
+    get_optimizer_groups,
     load_source_data,
     log_config,
 )
@@ -66,7 +63,7 @@ log = logging.getLogger(f"ionis-{CONFIG['version']}")
 DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
 
-# ── Per-Band Normalization (V16 spec) ─────────────────────────────────────────
+# ── Per-Band Normalization (per-source per-band) ─────────────────────────────────────────
 
 def normalize_snr_per_band(df, source, norm_constants):
     """Apply per-source per-band Z-score normalization.
@@ -124,12 +121,12 @@ def train():
     date_range = f"{date_result.result_rows[0][0]} to {date_result.result_rows[0][1]}"
     client.close()
 
-    # ── Per-Band Normalization (V16 spec) ──
+    # ── Per-Band Normalization (per-source per-band) ──
     norm_consts = CONFIG["norm_constants_per_band"]
     contest_src = CONFIG["data"]["contest_norm_source"]
 
     log.info("")
-    log.info("=== PER-SOURCE PER-BAND NORMALIZATION (V16 spec) ===")
+    log.info("=== PER-SOURCE PER-BAND NORMALIZATION (per-source per-band) ===")
 
     wspr_snr = normalize_snr_per_band(wspr_df, 'wspr', norm_consts)
     rbn_snr = normalize_snr_per_band(rbn_df, 'rbn', norm_consts)
@@ -203,8 +200,8 @@ def train():
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     log.info(f"Split: {train_size:,} train / {val_size:,} val")
 
-    # ── Model (V16 Law #1) ──
-    model = IonisV12Gate(
+    # ── Model (Constraint #1) ──
+    model = IonisGate(
         dnn_dim=CONFIG["model"]["dnn_dim"],
         sidecar_hidden=CONFIG["model"]["sidecar_hidden"],
         sfi_idx=CONFIG["model"]["sfi_idx"],
@@ -212,15 +209,15 @@ def train():
     ).to(DEVICE)
 
     total_params = sum(p.numel() for p in model.parameters())
-    log.info(f"Model: IonisV12Gate ({total_params:,} params)")
+    log.info(f"Model: IonisGate ({total_params:,} params)")
 
-    # ── Defibrillator (V16 Law #4) ──
-    init_v16_defibrillator(model)
+    # ── Defibrillator (Constraint #4) ──
+    init_defibrillator(model)
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log.info(f"Trainable: {trainable:,} / {total_params:,}")
 
-    # ── Optimizer (V16 6-group) ──
-    param_groups = get_v16_optimizer_groups(
+    # ── Optimizer (V20 6-group) ──
+    param_groups = get_optimizer_groups(
         model,
         trunk_lr=CONFIG["training"]["trunk_lr"],
         scaler_lr=CONFIG["training"]["scaler_lr"],
@@ -231,7 +228,7 @@ def train():
     epochs = CONFIG["training"]["epochs"]
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 
-    # ── HuberLoss (V16 Law #2) ──
+    # ── HuberLoss (Constraint #2) ──
     criterion = nn.HuberLoss(reduction='none', delta=CONFIG["training"]["huber_delta"])
     lambda_var = CONFIG["training"]["lambda_var"]
 
@@ -262,7 +259,7 @@ def train():
             bx, by, bw = bx.to(DEVICE), by.to(DEVICE), bw.to(DEVICE)
             optimizer.zero_grad()
 
-            # V16 Law #3: Gate variance loss
+            # Constraint #3: Gate variance loss
             out, sun_gate, storm_gate = model.forward_with_gates(bx)
             primary_loss = (criterion(out, by) * bw).mean()
             var_loss = -lambda_var * (sun_gate.var() + storm_gate.var())
@@ -271,8 +268,8 @@ def train():
             loss.backward()
             optimizer.step()
 
-            # V16 Law #5: Weight clamp
-            clamp_v16_sidecars(model)
+            # Constraint #5: Weight clamp
+            clamp_sidecars(model)
 
             train_loss_sum += primary_loss.item()
             train_batches += 1
@@ -360,14 +357,14 @@ def train():
     if p_pass and kp_pass and sfi_pass:
         log.info("")
         log.info(">>> V20 REPLICATION: SUCCESS <<<")
-        log.info(">>> V16 reproduced in clean codebase <<<")
+        log.info(">>> V20 reproduced in clean codebase <<<")
     else:
         log.info("")
         log.info(">>> V20 REPLICATION: FAILED <<<")
-        log.info(">>> Review training logs and compare to V16 <<<")
+        log.info(">>> Review training logs and compare to V20 <<<")
 
     log.info("")
-    log.info("V16 REFERENCE: Pearson +0.4873, Kp +3.445σ, SFI +0.478σ")
+    log.info("V20 REFERENCE: Pearson +0.4873, Kp +3.445σ, SFI +0.478σ")
 
 
 if __name__ == '__main__':

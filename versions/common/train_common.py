@@ -2,7 +2,7 @@
 train_common.py — Shared training utilities for IONIS models
 
 This module contains all shared code for training:
-- Model architecture: IonisV12Gate (the sovereign architecture)
+- Model architecture: IonisGate (the sovereign architecture)
 - MonotonicMLP for physics-constrained sidecars
 - Feature engineering
 - Grid utilities
@@ -13,10 +13,6 @@ Version-specific training scripts should:
 1. Load their config from JSON
 2. Import from this module
 3. Call the training functions with their config
-
-NOTE: IonisModel was purged on 2026-02-11 per Chief Architect directive.
-      It used LayerNorm/GELU/Dropout which broke monotonic signal propagation.
-      IonisV12Gate is the only supported architecture.
 """
 
 import gc
@@ -137,20 +133,21 @@ class MonotonicMLP(nn.Module):
         return nn.functional.linear(h, w2, self.fc2.bias)
 
 
-# ── V16 Production Model (Sovereign Architecture) ────────────────────────────
+# ── Model Architecture ────────────────────────────────────────────────────────
 
-def _gate_v16(x):
-    """V16 gate function: range 0.5 to 2.0"""
+def _gate(x):
+    """Gate function: range 0.5 to 2.0"""
     return 0.5 + 1.5 * torch.sigmoid(x)
 
 
-class IonisV12Gate(nn.Module):
+class IonisGate(nn.Module):
     """
-    V16 Production Model — validated at 98.5% FT8 recall on PSKR live data.
+    IONIS Production Model — gated sidecars for physics-constrained SNR prediction.
 
-    Key differences from IonisModel:
-        - Gates from trunk output (256-dim), not raw input (11-dim)
-        - Gate range 0.5-2.0 (vs 0.5-1.5)
+    Architecture:
+        - Trunk: geography/time features (11-dim) → 256-dim representation
+        - Gates from trunk output (256-dim), not raw input
+        - Gate range 0.5-2.0
         - Separate base_head (256→128→1) and scaler_heads (256→64→1)
         - Uses Mish activation, no LayerNorm or Dropout
         - Requires defibrillator init and weight clamping to keep sidecars alive
@@ -220,8 +217,8 @@ class IonisV12Gate(nn.Module):
 
         sun_logit = self.sun_scaler_head(trunk_out)
         storm_logit = self.storm_scaler_head(trunk_out)
-        sun_gate = _gate_v16(sun_logit)
-        storm_gate = _gate_v16(storm_logit)
+        sun_gate = _gate(sun_logit)
+        storm_gate = _gate(storm_logit)
 
         return base_snr + sun_gate * self.sun_sidecar(x_sfi) + \
                storm_gate * self.storm_sidecar(x_kp)
@@ -237,8 +234,8 @@ class IonisV12Gate(nn.Module):
 
         sun_logit = self.sun_scaler_head(trunk_out)
         storm_logit = self.storm_scaler_head(trunk_out)
-        sun_gate = _gate_v16(sun_logit)
-        storm_gate = _gate_v16(storm_logit)
+        sun_gate = _gate(sun_logit)
+        storm_gate = _gate(storm_logit)
 
         sun_boost = self.sun_sidecar(x_sfi)
         storm_boost = self.storm_sidecar(x_kp)
@@ -265,12 +262,12 @@ class IonisV12Gate(nn.Module):
             trunk_out = self.trunk(x_deep)
             sun_logit = self.sun_scaler_head(trunk_out)
             storm_logit = self.storm_scaler_head(trunk_out)
-        return _gate_v16(sun_logit), _gate_v16(storm_logit)
+        return _gate(sun_logit), _gate(storm_logit)
 
 
-def init_v16_defibrillator(model):
+def init_defibrillator(model):
     """
-    Apply V16 defibrillator initialization to keep sidecars alive.
+    Apply defibrillator initialization to keep sidecars alive.
 
     CRITICAL: Call this after model creation, before training.
 
@@ -301,14 +298,11 @@ def init_v16_defibrillator(model):
     log.info("Defibrillator applied: sidecar weights uniform(0.8-1.2), fc2.bias=-10.0, fc1.bias frozen")
 
 
-def clamp_v16_sidecars(model):
+def clamp_sidecars(model):
     """
     Clamp sidecar weights to [0.5, 2.0] to prevent collapse.
 
     CRITICAL: Call this after every optimizer.step() during training.
-
-    This prevents sidecars from collapsing to zero, which is what
-    killed every V19 variant.
     """
     with torch.no_grad():
         for sidecar in [model.sun_sidecar, model.storm_sidecar]:
@@ -316,12 +310,12 @@ def clamp_v16_sidecars(model):
             sidecar.fc2.weight.clamp_(0.5, 2.0)
 
 
-def get_v16_optimizer_groups(model, trunk_lr=1e-5, scaler_lr=5e-5, sidecar_lr=1e-3):
+def get_optimizer_groups(model, trunk_lr=1e-5, scaler_lr=5e-5, sidecar_lr=1e-3):
     """
-    Get V16's 6-group optimizer configuration.
+    Get 6-group optimizer configuration.
 
     Args:
-        model: IonisV12Gate model
+        model: IonisGate model
         trunk_lr: Learning rate for trunk and base_head
         scaler_lr: Learning rate for scaler heads (intermediate)
         sidecar_lr: Learning rate for sidecars (fastest)
@@ -339,6 +333,14 @@ def get_v16_optimizer_groups(model, trunk_lr=1e-5, scaler_lr=5e-5, sidecar_lr=1e
         {'params': [p for p in model.storm_sidecar.parameters() if p.requires_grad],
          'lr': sidecar_lr},
     ]
+
+
+# ── Backward Compatibility Aliases ───────────────────────────────────────────
+# TODO: Remove once all version scripts are updated to use new names
+IonisV12Gate = IonisGate
+init_v16_defibrillator = init_defibrillator
+clamp_v16_sidecars = clamp_sidecars
+get_v16_optimizer_groups = get_optimizer_groups
 
 
 # ── Dataset ──────────────────────────────────────────────────────────────────
