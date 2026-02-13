@@ -6,7 +6,7 @@ Queries 1M contest paths from validation.step_i_paths, runs V20 inference,
 denormalizes Z-scores to dB using per-band WSPR norm constants,
 applies mode thresholds, and reports recall.
 
-V20 Golden Master: V20 replication in clean codebase.
+V20 Golden Master: production model recall validation.
 
 Baselines:
 - VOACAP:    75.82%

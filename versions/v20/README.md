@@ -23,6 +23,7 @@ These constraints are **non-negotiable**:
 3. **Regularization**: Gate variance loss — forces context-dependent behavior
 4. **Init**: Defibrillator — weights uniform(0.8-1.2), fc2.bias=-10.0, fc1.bias frozen
 5. **Constraint**: Weight clamp [0.5, 2.0] after EVERY optimizer.step()
+6. **Data**: WSPR + RBN DXpedition + Contest (no RBN Full)
 
 ## Data Recipe
 
@@ -30,7 +31,8 @@ These constraints are **non-negotiable**:
 |--------|--------|------|
 | WSPR signatures | 20M | Floor (-28 dB) |
 | RBN DXpedition | 91K × 50 = 4.55M | Rare paths (152 DXCC) |
-| Contest | 5.7M | Ceiling (SSB +10 dB) |
+| Contest | ~6M | Ceiling (SSB +10 dB) |
+| RBN Full | 0 | Not used in V20 |
 
 ## Files
 

@@ -364,7 +364,7 @@ def train():
         log.info(">>> Review training logs and compare to V20 <<<")
 
     log.info("")
-    log.info("V20 REFERENCE: Pearson +0.4873, Kp +3.445σ, SFI +0.478σ")
+    log.info("V20 REFERENCE: Pearson +0.4879, Kp +3.487σ, SFI +0.482σ")
 
 
 if __name__ == '__main__':
