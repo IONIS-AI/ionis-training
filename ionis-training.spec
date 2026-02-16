@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        3.0.0
+Version:        3.0.1
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -53,6 +53,11 @@ install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
 %{_datadir}/%{name}/Modelfile
 
 %changelog
+* Mon Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.0.1-1
+- Complete V20 test suite: 62 tests across 8 groups (TST-100 through TST-800)
+- Replace hardcoded paths with $IONIS_WORKSPACE throughout
+- Clean up legacy V12/V16 naming — class is IonisGate, period
+
 * Fri Feb 13 2026 Greg Beam <ki7mt@yahoo.com> - 3.0.0-1
 - Rename package: ki7mt-ai-lab-training → ionis-training
 - Move to IONIS-AI GitHub org
