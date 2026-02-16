@@ -47,7 +47,7 @@ These constraints are **non-negotiable**:
 ## Running
 
 ```bash
-cd /Users/gbeam/workspace/ionis-ai/ionis-training
+cd $IONIS_WORKSPACE/ionis-training
 python versions/v20/train_v20.py
 python versions/v20/verify_v20.py
 python versions/v20/test_v20.py
