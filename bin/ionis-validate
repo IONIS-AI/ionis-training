@@ -1,0 +1,76 @@
+#!/bin/bash
+# ionis-validate — IONIS V20 Model Validation CLI
+#
+# Installed by the ionis-training-validate RPM subpackage.
+# Runs validation tests, single predictions, and custom path tests
+# against the V20 production model.
+#
+# Usage:
+#   ionis-validate test              Run full 62-test validation suite
+#   ionis-validate predict [args]    Predict a single HF path
+#   ionis-validate custom <file>     Batch custom path tests from JSON
+#   ionis-validate info              Show model and system information
+#   ionis-validate help              Show this help
+
+set -euo pipefail
+
+INSTALL_DIR="/usr/share/ionis-training"
+PYTHON="python3"
+
+# Allow override for development (run from repo checkout)
+if [ -n "${IONIS_TRAINING_DIR:-}" ]; then
+    INSTALL_DIR="$IONIS_TRAINING_DIR"
+fi
+
+TESTS_DIR="$INSTALL_DIR/versions/v20/tests"
+
+usage() {
+    cat <<'EOF'
+IONIS V20 Model Validation CLI
+
+Usage:
+  ionis-validate <command> [options]
+
+Commands:
+  test              Run full 62-test validation suite (TST-100 through TST-800)
+  predict [args]    Predict SNR for a single HF propagation path
+  custom <file>     Run batch custom path tests from a JSON file
+  info              Show model version, checkpoint, and system information
+  help              Show this help message
+
+Examples:
+  ionis-validate test
+  ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
+  ionis-validate custom my_paths.json
+  ionis-validate info
+
+Environment:
+  IONIS_TRAINING_DIR    Override install path (for development)
+EOF
+}
+
+case "${1:-help}" in
+    test)
+        shift
+        exec "$PYTHON" "$TESTS_DIR/run_all.py" "$@"
+        ;;
+    predict)
+        shift
+        exec "$PYTHON" "$TESTS_DIR/run_predict.py" "$@"
+        ;;
+    custom)
+        shift
+        exec "$PYTHON" "$TESTS_DIR/run_custom.py" "$@"
+        ;;
+    info)
+        exec "$PYTHON" "$TESTS_DIR/run_info.py"
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        echo "Run 'ionis-validate help' for usage." >&2
+        exit 1
+        ;;
+esac

@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        3.0.1
+Version:        3.1.0
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -26,6 +26,28 @@ Scripts:
   - test_v2_sensitivity.py:  Sensitivity analysis
   - dashboard.py:            Monitoring and visualization
 
+# ── validate subpackage ─────────────────────────────────────────────────────
+
+%package validate
+Summary:        IONIS V20 Model Validation Suite
+Requires:       python3 >= 3.9
+
+%description validate
+Standalone validation suite for the IONIS V20 HF propagation model.
+Includes 62-test automated battery, custom path testing, and single-prediction
+CLI. No ClickHouse or training infrastructure required.
+
+Install dependencies:
+  pip3 install -r /usr/share/ionis-training/requirements-validate.txt
+
+Commands:
+  ionis-validate test              Run 62-test validation suite
+  ionis-validate predict [args]    Predict a single HF path
+  ionis-validate custom <file>     Batch custom path tests from JSON
+  ionis-validate info              Show model and system information
+
+# ── build ────────────────────────────────────────────────────────────────────
+
 %prep
 %autosetup -n %{name}-%{version}
 
@@ -33,6 +55,7 @@ Scripts:
 # Nothing to build - Python scripts
 
 %install
+# Base package: legacy scripts
 install -d %{buildroot}%{_datadir}/%{name}/scripts
 install -d %{buildroot}%{_datadir}/%{name}/models
 
@@ -40,8 +63,26 @@ for script in scripts/*.py; do
     install -m 644 "$script" %{buildroot}%{_datadir}/%{name}/scripts/
 done
 
-# Modelfile for container/Ollama config
 install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
+
+# Validate subpackage
+install -d %{buildroot}%{_bindir}
+install -d %{buildroot}%{_datadir}/%{name}/versions/v20
+install -d %{buildroot}%{_datadir}/%{name}/versions/v20/tests
+
+install -m 755 bin/ionis-validate %{buildroot}%{_bindir}/
+
+install -m 644 versions/v20/model.py %{buildroot}%{_datadir}/%{name}/versions/v20/
+install -m 644 versions/v20/config_v20.json %{buildroot}%{_datadir}/%{name}/versions/v20/
+install -m 644 versions/v20/ionis_v20.pth %{buildroot}%{_datadir}/%{name}/versions/v20/
+
+for test_script in versions/v20/tests/*.py; do
+    install -m 644 "$test_script" %{buildroot}%{_datadir}/%{name}/versions/v20/tests/
+done
+
+install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
+
+# ── file lists ───────────────────────────────────────────────────────────────
 
 %files
 %license COPYING
@@ -52,7 +93,29 @@ install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
 %{_datadir}/%{name}/scripts/*.py
 %{_datadir}/%{name}/Modelfile
 
+%files validate
+%license COPYING
+%{_bindir}/ionis-validate
+%dir %{_datadir}/%{name}/versions
+%dir %{_datadir}/%{name}/versions/v20
+%dir %{_datadir}/%{name}/versions/v20/tests
+%{_datadir}/%{name}/versions/v20/model.py
+%{_datadir}/%{name}/versions/v20/config_v20.json
+%{_datadir}/%{name}/versions/v20/ionis_v20.pth
+%{_datadir}/%{name}/versions/v20/tests/*.py
+%{_datadir}/%{name}/requirements-validate.txt
+
+# ── changelog ────────────────────────────────────────────────────────────────
+
 %changelog
+* Sun Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.0-1
+- Add ionis-training-validate subpackage for beta testing
+- Extract model.py from train_common.py (zero ClickHouse dependency)
+- Add ionis-validate CLI: test, predict, custom, info commands
+- Fix device selection: CUDA > MPS > CPU (universal)
+- Fix run_all.py Python discovery (use sys.executable)
+- Ship V20 checkpoint (808 KB) in validate RPM
+
 * Mon Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.0.1-1
 - Complete V20 test suite: 62 tests across 8 groups (TST-100 through TST-800)
 - Replace hardcoded paths with $IONIS_WORKSPACE throughout

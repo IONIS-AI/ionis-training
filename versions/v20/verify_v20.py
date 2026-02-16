@@ -9,7 +9,7 @@ Tests:
   4. Decomposition math: base + sun_gate*sun_raw + storm_gate*storm_raw = predicted
 
 Config-driven: all constants loaded from config_v20.json.
-Architecture imported from train_common.py (no re-declaration).
+Architecture imported from model.py (version-locked).
 
 V20 outputs are in Z-score (sigma) units.
 Approximate dB conversion: multiply by ~6.7.
@@ -25,12 +25,9 @@ import torch
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
-TRAINING_DIR = os.path.dirname(VERSIONS_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, SCRIPT_DIR)
 
-from train_common import IonisGate, _gate
+from model import IonisGate, _gate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -47,7 +44,7 @@ SIDECAR_HIDDEN = CONFIG["model"]["sidecar_hidden"]
 
 DB_PER_SIGMA = 6.7  # Approximate conversion factor
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 
 # ── Test Vector Builder ──────────────────────────────────────────────────────

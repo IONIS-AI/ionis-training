@@ -25,11 +25,9 @@ import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 V20_DIR = os.path.dirname(SCRIPT_DIR)
-VERSIONS_DIR = os.path.dirname(V20_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, V20_DIR)
 
-from train_common import IonisGate
+from model import IonisGate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -45,7 +43,7 @@ SIDECAR_HIDDEN = CONFIG["model"]["sidecar_hidden"]
 
 BAND_TO_HZ = {int(k): v for k, v in CONFIG["band_to_hz"].items()}
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 SIGMA_TO_DB = 6.7
 

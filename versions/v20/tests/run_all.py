@@ -45,17 +45,9 @@ def run_test_module(script_name: str) -> tuple[bool, str]:
     """Run a test module and capture output."""
     script_path = os.path.join(SCRIPT_DIR, script_name)
 
-    # Find Python interpreter
-    venv_python = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))),
-        ".venv", "bin", "python"
-    )
-    if not os.path.exists(venv_python):
-        venv_python = sys.executable
-
     try:
         result = subprocess.run(
-            [venv_python, script_path],
+            [sys.executable, script_path],
             capture_output=True,
             text=True,
             timeout=300  # 5 minute timeout per module

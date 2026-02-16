@@ -13,7 +13,7 @@ Baselines:
 - IONIS V15: 86.89%
 
 Config-driven: all constants loaded from config_v20.json.
-Architecture imported from train_common.py (no re-declaration).
+Architecture imported from model.py (version-locked).
 """
 
 import json
@@ -28,11 +28,9 @@ import torch
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, SCRIPT_DIR)
 
-from train_common import IonisGate
+from model import IonisGate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -72,7 +70,7 @@ THRESHOLDS = {
     'RY': -21.0,
 }
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 
 # ── Feature Engineering ──────────────────────────────────────────────────────

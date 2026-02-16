@@ -26,11 +26,9 @@ import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 V20_DIR = os.path.dirname(SCRIPT_DIR)
-VERSIONS_DIR = os.path.dirname(V20_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, V20_DIR)
 
-from train_common import IonisGate
+from model import IonisGate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -44,7 +42,7 @@ SFI_IDX = CONFIG["model"]["sfi_idx"]
 KP_PENALTY_IDX = CONFIG["model"]["kp_penalty_idx"]
 SIDECAR_HIDDEN = CONFIG["model"]["sidecar_hidden"]
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 SIGMA_TO_DB = 6.7  # Approximate conversion factor
 

@@ -28,11 +28,9 @@ import torch
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 V20_DIR = os.path.dirname(SCRIPT_DIR)
-VERSIONS_DIR = os.path.dirname(V20_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, V20_DIR)
 
-from train_common import IonisGate
+from model import IonisGate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -398,12 +396,15 @@ def test_tst507_device_portability(device):
     # Always test CPU
     devices_to_test = [torch.device("cpu")]
 
-    # Add MPS if available
-    if torch.backends.mps.is_available():
+    # Add accelerator if available
+    if torch.cuda.is_available():
+        devices_to_test.append(torch.device("cuda"))
+        print("  Testing: CPU, CUDA")
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         devices_to_test.append(torch.device("mps"))
         print("  Testing: CPU, MPS")
     else:
-        print("  Testing: CPU only (MPS not available)")
+        print("  Testing: CPU only (no accelerator available)")
 
     predictions = {}
 
@@ -453,7 +454,7 @@ def main():
     print("=" * 60)
 
     # Determine device
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = get_device()
 
     # Load model
     print(f"\nLoading {MODEL_PATH}...")

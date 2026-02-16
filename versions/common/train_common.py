@@ -2,7 +2,7 @@
 train_common.py — Shared training utilities for IONIS models
 
 This module contains all shared code for training:
-- Model architecture: IonisGate (the sovereign architecture)
+- Model architecture: IonisGate (imported from model.py)
 - MonotonicMLP for physics-constrained sidecars
 - Feature engineering
 - Grid utilities
@@ -16,8 +16,6 @@ Version-specific training scripts should:
 """
 
 import gc
-import math
-import re
 import time
 import logging
 
@@ -28,23 +26,17 @@ from torch.utils.data import Dataset
 
 import clickhouse_connect
 
+# Model architecture lives in model.py (no ClickHouse dependency)
+from model import (  # noqa: F401
+    MonotonicMLP, IonisGate, _gate,
+    get_device, grid4_to_latlon, build_features,
+    BAND_FREQ_HZ, GRID_RE,
+)
+
 log = logging.getLogger(__name__)
 
 
 # ── Grid Utilities ───────────────────────────────────────────────────────────
-
-GRID_RE = re.compile(r'[A-Ra-r]{2}[0-9]{2}')
-
-
-def grid4_to_latlon(g):
-    """Convert a single 4-char Maidenhead grid to (lat, lon) centroid."""
-    s = str(g).strip().rstrip('\x00').upper()
-    m = GRID_RE.search(s)
-    g4 = m.group(0) if m else 'JJ00'
-    lon = (ord(g4[0]) - ord('A')) * 20.0 - 180.0 + int(g4[2]) * 2.0 + 1.0
-    lat = (ord(g4[1]) - ord('A')) * 10.0 - 90.0 + int(g4[3]) * 1.0 + 0.5
-    return lat, lon
-
 
 def grid4_to_latlon_arrays(grids):
     """Convert array of 4-char grids to (lat, lon) arrays."""
@@ -115,155 +107,7 @@ def engineer_features(df, config):
     return X
 
 
-# ── Model Architecture ───────────────────────────────────────────────────────
-
-class MonotonicMLP(nn.Module):
-    """Monotonically increasing MLP for physics constraints."""
-
-    def __init__(self, hidden_dim=8):
-        super().__init__()
-        self.fc1 = nn.Linear(1, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, 1, bias=True)
-        self.activation = nn.Softplus()
-
-    def forward(self, x):
-        w1 = torch.abs(self.fc1.weight)
-        w2 = torch.abs(self.fc2.weight)
-        h = self.activation(nn.functional.linear(x, w1, self.fc1.bias))
-        return nn.functional.linear(h, w2, self.fc2.bias)
-
-
-# ── Model Architecture ────────────────────────────────────────────────────────
-
-def _gate(x):
-    """Gate function: range 0.5 to 2.0"""
-    return 0.5 + 1.5 * torch.sigmoid(x)
-
-
-class IonisGate(nn.Module):
-    """
-    IONIS Production Model — gated sidecars for physics-constrained SNR prediction.
-
-    Architecture:
-        - Trunk: geography/time features (11-dim) → 256-dim representation
-        - Gates from trunk output (256-dim), not raw input
-        - Gate range 0.5-2.0
-        - Separate base_head (256→128→1) and scaler_heads (256→64→1)
-        - Uses Mish activation, no LayerNorm or Dropout
-        - Requires defibrillator init and weight clamping to keep sidecars alive
-
-    Args:
-        dnn_dim: Number of geography/time features (default 11)
-        sidecar_hidden: Hidden units in MonotonicMLP (default 8)
-        sfi_idx: Index of SFI feature in input (default 11)
-        kp_penalty_idx: Index of Kp penalty feature in input (default 12)
-        gate_init_bias: Initial bias for scaler heads (default -ln(2))
-    """
-
-    def __init__(self, dnn_dim=11, sidecar_hidden=8, sfi_idx=11, kp_penalty_idx=12,
-                 gate_init_bias=None):
-        super().__init__()
-
-        if gate_init_bias is None:
-            gate_init_bias = -math.log(2.0)
-
-        self.dnn_dim = dnn_dim
-        self.sfi_idx = sfi_idx
-        self.kp_penalty_idx = kp_penalty_idx
-
-        # Trunk: geography/time features → 256-dim representation
-        self.trunk = nn.Sequential(
-            nn.Linear(dnn_dim, 512), nn.Mish(),
-            nn.Linear(512, 256), nn.Mish(),
-        )
-
-        # Base head: trunk → SNR prediction
-        self.base_head = nn.Sequential(
-            nn.Linear(256, 128), nn.Mish(),
-            nn.Linear(128, 1),
-        )
-
-        # Scaler heads: trunk → gate logits (256-dim input, expressive)
-        self.sun_scaler_head = nn.Sequential(
-            nn.Linear(256, 64), nn.Mish(),
-            nn.Linear(64, 1),
-        )
-        self.storm_scaler_head = nn.Sequential(
-            nn.Linear(256, 64), nn.Mish(),
-            nn.Linear(64, 1),
-        )
-
-        # Physics sidecars (monotonic)
-        self.sun_sidecar = MonotonicMLP(hidden_dim=sidecar_hidden)
-        self.storm_sidecar = MonotonicMLP(hidden_dim=sidecar_hidden)
-
-        # Initialize scaler heads
-        self._init_scaler_heads(gate_init_bias)
-
-    def _init_scaler_heads(self, gate_init_bias):
-        """Initialize scaler head biases for balanced gates."""
-        for head in [self.sun_scaler_head, self.storm_scaler_head]:
-            final_layer = head[-1]
-            nn.init.zeros_(final_layer.weight)
-            nn.init.constant_(final_layer.bias, gate_init_bias)
-
-    def forward(self, x):
-        x_deep = x[:, :self.dnn_dim]
-        x_sfi = x[:, self.sfi_idx:self.sfi_idx + 1]
-        x_kp = x[:, self.kp_penalty_idx:self.kp_penalty_idx + 1]
-
-        trunk_out = self.trunk(x_deep)
-        base_snr = self.base_head(trunk_out)
-
-        sun_logit = self.sun_scaler_head(trunk_out)
-        storm_logit = self.storm_scaler_head(trunk_out)
-        sun_gate = _gate(sun_logit)
-        storm_gate = _gate(storm_logit)
-
-        return base_snr + sun_gate * self.sun_sidecar(x_sfi) + \
-               storm_gate * self.storm_sidecar(x_kp)
-
-    def forward_with_gates(self, x):
-        """Forward pass returning gate values for variance loss."""
-        x_deep = x[:, :self.dnn_dim]
-        x_sfi = x[:, self.sfi_idx:self.sfi_idx + 1]
-        x_kp = x[:, self.kp_penalty_idx:self.kp_penalty_idx + 1]
-
-        trunk_out = self.trunk(x_deep)
-        base_snr = self.base_head(trunk_out)
-
-        sun_logit = self.sun_scaler_head(trunk_out)
-        storm_logit = self.storm_scaler_head(trunk_out)
-        sun_gate = _gate(sun_logit)
-        storm_gate = _gate(storm_logit)
-
-        sun_boost = self.sun_sidecar(x_sfi)
-        storm_boost = self.storm_sidecar(x_kp)
-
-        return base_snr + sun_gate * sun_boost + storm_gate * storm_boost, \
-               sun_gate, storm_gate
-
-    def get_sun_effect(self, sfi_normalized, device):
-        """Get raw sun sidecar output for a given SFI value."""
-        with torch.no_grad():
-            x = torch.tensor([[sfi_normalized]], dtype=torch.float32, device=device)
-            return self.sun_sidecar(x).item()
-
-    def get_storm_effect(self, kp_penalty, device):
-        """Get raw storm sidecar output for a given Kp penalty value."""
-        with torch.no_grad():
-            x = torch.tensor([[kp_penalty]], dtype=torch.float32, device=device)
-            return self.storm_sidecar(x).item()
-
-    def get_gates(self, x):
-        """Get gate values without gradient tracking."""
-        x_deep = x[:, :self.dnn_dim]
-        with torch.no_grad():
-            trunk_out = self.trunk(x_deep)
-            sun_logit = self.sun_scaler_head(trunk_out)
-            storm_logit = self.storm_scaler_head(trunk_out)
-        return _gate(sun_logit), _gate(storm_logit)
-
+# ── Training Helpers (defibrillator, clamping, optimizer) ────────────────────
 
 def init_defibrillator(model):
     """

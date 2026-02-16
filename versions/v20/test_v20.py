@@ -13,7 +13,7 @@ test_v20.py — IONIS V20 Golden Master Sensitivity Analysis
   8. Physics summary with sidecar effects
 
 Config-driven: all constants loaded from config_v20.json.
-Architecture imported from train_common.py (no re-declaration).
+Architecture imported from model.py (version-locked).
 
 V20 outputs in Z-normalized units (sigma). Reports both sigma and approximate dB.
 """
@@ -29,11 +29,9 @@ import torch
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, SCRIPT_DIR)
 
-from train_common import IonisGate, _gate
+from model import IonisGate, _gate, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -52,7 +50,7 @@ BAND_TO_HZ = {int(k): v for k, v in CONFIG["band_to_hz"].items()}
 
 SIGMA_TO_DB = 6.7  # Approximate conversion factor
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 # ── Reference Path ───────────────────────────────────────────────────────────
 

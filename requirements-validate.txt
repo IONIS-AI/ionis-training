@@ -1,0 +1,7 @@
+# IONIS V20 Validation Dependencies
+# Install: pip3 install -r requirements-validate.txt
+#
+# No ClickHouse. No training infrastructure.
+# Just what's needed to load the model and run predictions.
+torch>=2.0
+numpy>=1.24

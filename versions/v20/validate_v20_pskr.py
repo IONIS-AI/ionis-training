@@ -9,7 +9,7 @@ V20 outputs per-band Z-scores. To compare with observed PSKR SNR,
 we denormalize using per-band WSPR norm constants from config.
 
 Config-driven: all constants loaded from config_v20.json.
-Architecture imported from train_common.py (no re-declaration).
+Architecture imported from model.py (version-locked).
 
 Usage:
     python validate_v20_pskr.py [--limit 100000] [--mode FT8]
@@ -30,11 +30,9 @@ import clickhouse_connect
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-VERSIONS_DIR = os.path.dirname(SCRIPT_DIR)
-COMMON_DIR = os.path.join(VERSIONS_DIR, "common")
-sys.path.insert(0, COMMON_DIR)
+sys.path.insert(0, SCRIPT_DIR)
 
-from train_common import IonisGate, grid4_to_latlon
+from model import IonisGate, grid4_to_latlon, get_device
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
@@ -69,7 +67,7 @@ THRESHOLDS = {
     'WSPR': -28.0,
 }
 
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+DEVICE = get_device()
 
 # BASELINE reference values for comparison
 BASELINE_FT8_RECALL = 98.47
