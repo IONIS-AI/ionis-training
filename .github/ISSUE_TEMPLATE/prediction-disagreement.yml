@@ -1,0 +1,90 @@
+name: Prediction Disagreement
+description: Model prediction doesn't match your on-air experience
+title: "[V20 Beta] Prediction: "
+labels: ["beta-test", "prediction"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The model predicted a path as open/closed, but your on-air experience
+        says otherwise. These reports are the most valuable feedback — they
+        become training data for the next version.
+
+  - type: input
+    id: tx-grid
+    attributes:
+      label: TX Grid
+      description: 4-character Maidenhead grid of the transmitter
+      placeholder: FN20
+    validations:
+      required: true
+
+  - type: input
+    id: rx-grid
+    attributes:
+      label: RX Grid
+      description: 4-character Maidenhead grid of the receiver
+      placeholder: IO91
+    validations:
+      required: true
+
+  - type: dropdown
+    id: band
+    attributes:
+      label: Band
+      options:
+        - 160m
+        - 80m
+        - 60m
+        - 40m
+        - 30m
+        - 20m
+        - 17m
+        - 15m
+        - 12m
+        - 10m
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - FT8
+        - FT4
+        - CW
+        - SSB
+        - RTTY
+        - WSPR
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: prediction-command
+    attributes:
+      label: Prediction Command and Output
+      description: Paste the `ionis-validate predict` command you ran and its output
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: on-air-experience
+    attributes:
+      label: What Actually Happened
+      description: |
+        Describe your on-air experience. Include:
+        - Approximate date and UTC time
+        - Did you make the contact? Signal report if available.
+        - How often do you work this path? (daily, occasionally, never)
+        - Solar conditions if you know them (SFI, Kp)
+    validations:
+      required: true
+
+  - type: textarea
+    id: station-details
+    attributes:
+      label: Station Details (optional)
+      description: Antenna type, power level, anything relevant to expected signal levels

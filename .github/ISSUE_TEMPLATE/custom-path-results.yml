@@ -1,0 +1,55 @@
+name: Custom Path Results
+description: Share results from `ionis-validate custom` with your own test paths
+title: "[V20 Beta] Custom paths: "
+labels: ["beta-test", "custom-paths"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Custom path test files that expose model weaknesses are the most
+        valuable feedback you can provide. Attach your JSON file and paste
+        the output below.
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Paste the output of `ionis-validate info`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: custom-output
+    attributes:
+      label: Command Output
+      description: Paste the output of `ionis-validate custom your_paths.json`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: json-file
+    attributes:
+      label: JSON Test File
+      description: Paste the contents of your JSON test file
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: |
+        Which paths are you most confident about? Which ones surprised you?
+        Any patterns you noticed (e.g., "all polar paths over-predicted")?
+    validations:
+      required: false
+
+  - type: textarea
+    id: report-output
+    attributes:
+      label: Full Report (optional)
+      description: If you ran `ionis-validate report --custom your_paths.json`, paste the full output here.
+      render: markdown

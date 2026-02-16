@@ -10,6 +10,7 @@
 #   ionis-validate predict [args]    Predict a single HF path
 #   ionis-validate custom <file>     Batch custom path tests from JSON
 #   ionis-validate info              Show model and system information
+#   ionis-validate report [--custom]  Generate a beta test report for GitHub Issues
 #   ionis-validate help              Show this help
 
 set -euo pipefail
@@ -35,6 +36,7 @@ Commands:
   test              Run full 62-test validation suite (TST-100 through TST-800)
   predict [args]    Predict SNR for a single HF propagation path
   custom <file>     Run batch custom path tests from a JSON file
+  report [opts]     Generate a beta test report for GitHub Issues
   info              Show model version, checkpoint, and system information
   help              Show this help message
 
@@ -42,6 +44,9 @@ Examples:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
   ionis-validate custom my_paths.json
+  ionis-validate report                         # system info + test results
+  ionis-validate report --custom my_paths.json  # include custom path results
+  ionis-validate report --skip-tests            # system info only (fast)
   ionis-validate info
 
 Environment:
@@ -61,6 +66,10 @@ case "${1:-help}" in
     custom)
         shift
         exec "$PYTHON" "$TESTS_DIR/run_custom.py" "$@"
+        ;;
+    report)
+        shift
+        exec "$PYTHON" "$TESTS_DIR/run_report.py" "$@"
         ;;
     info)
         exec "$PYTHON" "$TESTS_DIR/run_info.py"

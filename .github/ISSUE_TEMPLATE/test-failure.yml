@@ -1,0 +1,56 @@
+name: Test Suite Failure
+description: A test from `ionis-validate test` failed
+title: "[V20 Beta] Test failure: "
+labels: ["beta-test", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One or more tests from `ionis-validate test` failed. Paste the info
+        and failure output below. If you ran `ionis-validate report`, paste
+        the full output instead.
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Paste the output of `ionis-validate info`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: failure-output
+    attributes:
+      label: Failure Output
+      description: Paste the failing test output (test ID, expected vs actual)
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g., Rocky Linux 9.7, Fedora 41, RHEL 9.5
+      placeholder: Rocky Linux 9.7
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation Method
+      options:
+        - COPR RPM (dnf install)
+        - Git clone
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: report-output
+    attributes:
+      label: Full Report (optional)
+      description: If you ran `ionis-validate report`, paste the full output here instead of filling in the fields above.
+      render: markdown
