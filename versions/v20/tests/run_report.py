@@ -13,12 +13,12 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import platform
 import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 
 import torch
@@ -30,6 +30,23 @@ V20_DIR = os.path.dirname(SCRIPT_DIR)
 sys.path.insert(0, V20_DIR)
 
 from model import IonisGate, get_device
+
+
+def generate_install_token(checkpoint_path):
+    """Generate a proof-of-installation token.
+
+    Short hash proving the reporter has the checkpoint installed and ran
+    this command. Not cryptographic — just enough to distinguish real
+    installs from drive-by troll submissions.
+    """
+    h = hashlib.sha256()
+    h.update(b"ionis-v20-beta")
+    if os.path.exists(checkpoint_path):
+        with open(checkpoint_path, "rb") as f:
+            h.update(f.read(512))
+    h.update(platform.node().encode())
+    h.update(sys.version.encode())
+    return f"ionis-{h.hexdigest()[:12]}"
 
 
 def collect_system_info():
@@ -89,6 +106,8 @@ def collect_system_info():
     if device.type == "cuda":
         info["cuda_version"] = torch.version.cuda
         info["gpu"] = torch.cuda.get_device_name(0)
+
+    info["install_token"] = generate_install_token(checkpoint_path)
 
     return info
 
@@ -160,6 +179,7 @@ def generate_report(info, test_passed=None, test_output=None,
 
     lines.append(f"| **OS** | {info.get('os_release', info.get('platform', '?'))} |")
     lines.append(f"| **Hostname** | {info.get('hostname', '?')} |")
+    lines.append(f"| **Install Token** | `{info.get('install_token', 'unknown')}` |")
     lines.append("")
 
     # Test Suite Results

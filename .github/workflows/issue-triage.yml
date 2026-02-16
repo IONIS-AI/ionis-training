@@ -1,0 +1,43 @@
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  check-install-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for install token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const hasToken = /ionis-[0-9a-f]{12}/.test(body);
+            const labels = context.payload.issue.labels.map(l => l.name);
+            const isBeta = labels.includes('beta-test');
+
+            if (isBeta && hasToken) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['verified-install']
+              });
+            } else if (isBeta && !hasToken) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: ['needs-verification']
+              });
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: 'Thanks for the report! To help us verify this, please run `ionis-validate report` and paste the output (which includes an install token) into this issue. This helps us prioritize verified reports from installed packages.'
+              });
+            }

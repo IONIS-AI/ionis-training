@@ -44,6 +44,7 @@ Commands:
   ionis-validate test              Run 62-test validation suite
   ionis-validate predict [args]    Predict a single HF path
   ionis-validate custom <file>     Batch custom path tests from JSON
+  ionis-validate adif <file>       Validate model against your ADIF QSO log
   ionis-validate report [opts]     Generate a beta test report for GitHub Issues
   ionis-validate info              Show model and system information
 
