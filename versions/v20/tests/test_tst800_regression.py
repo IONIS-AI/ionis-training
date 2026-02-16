@@ -14,8 +14,8 @@ should cause these tests to fail, forcing an explicit version bump.
 
 V20 BASELINE VALUES (locked 2026-02-16):
   - Reference prediction (W3→G, 20m, SFI 150, Kp 2, 12 UTC): -0.328 sigma
-  - RMSE: 0.855 sigma
-  - Pearson: +0.4777
+  - RMSE: 0.8617 sigma
+  - Pearson: +0.4879
 """
 
 import json
@@ -57,11 +57,11 @@ DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 BASELINE_REF_PREDICTION_SIGMA = -0.328
 BASELINE_REF_TOLERANCE_SIGMA = 0.05  # ±0.05 sigma (~0.3 dB)
 
-# Training metrics from checkpoint
-BASELINE_RMSE = 0.855
+# Training metrics from checkpoint (val_rmse, val_pearson in ionis_v20.pth)
+BASELINE_RMSE = 0.8617
 BASELINE_RMSE_TOLERANCE = 0.01
 
-BASELINE_PEARSON = 0.4777
+BASELINE_PEARSON = 0.4879
 BASELINE_PEARSON_TOLERANCE = 0.005
 
 # Conversion factor
