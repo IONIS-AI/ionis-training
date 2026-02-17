@@ -93,6 +93,7 @@ python test_v20.py           # Sensitivity analysis
 | [ionis-core](https://github.com/IONIS-AI/ionis-core) | DDL schemas, SQL |
 | [ionis-apps](https://github.com/IONIS-AI/ionis-apps) | Go data ingesters |
 | [ionis-cuda](https://github.com/IONIS-AI/ionis-cuda) | CUDA signature engine |
+| [ionis-validate](https://github.com/IONIS-AI/ionis-validate) | Model validation suite (PyPI) |
 | [ionis-docs](https://github.com/IONIS-AI/ionis-docs) | Documentation site |
 
 ## License
