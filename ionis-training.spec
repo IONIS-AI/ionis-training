@@ -110,7 +110,7 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
-* Sun Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.0-1
+* Mon Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.0-1
 - Add ionis-training-validate subpackage for beta testing
 - Extract model.py from train_common.py (zero ClickHouse dependency)
 - Add ionis-validate CLI: test, predict, custom, info commands
