@@ -21,6 +21,7 @@ import sys
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -434,9 +435,17 @@ def main():
     print("\n  These tests verify learned physics matches ionospheric reality.")
     print("  The 'V16 Physics Laws' that must survive any refactoring.")
 
-    # Load model
+    # Load model (safetensors — no pickle)
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=DEVICE)
+    state_dict = load_safetensors(MODEL_PATH, device=str(DEVICE))
+
+    # Load metadata from companion JSON
+    meta_path = MODEL_PATH.replace(".safetensors", "_meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
 
     model = IonisGate(
         dnn_dim=DNN_DIM,
@@ -445,13 +454,13 @@ def main():
         kp_penalty_idx=KP_PENALTY_IDX,
         gate_init_bias=CONFIG["model"]["gate_init_bias"],
     ).to(DEVICE)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
     print(f"  Device: {DEVICE}")
     print(f"  Parameters: {sum(p.numel() for p in model.parameters()):,}")
-    print(f"  RMSE: {checkpoint.get('val_rmse', 0):.4f} sigma")
-    print(f"  Pearson: {checkpoint.get('val_pearson', 0):+.4f}")
+    print(f"  RMSE: {metadata.get('val_rmse', 0):.4f} sigma")
+    print(f"  Pearson: {metadata.get('val_pearson', 0):+.4f}")
 
     # Run tests
     results = []

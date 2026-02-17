@@ -16,6 +16,7 @@ import platform
 import sys
 
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -77,12 +78,18 @@ def main():
             size_str = f"{size_bytes / 1024:.1f} KB"
         print(f"  File size:     {size_str}")
 
-        checkpoint = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
+        # Load metadata from companion JSON (safetensors — no pickle)
+        meta_path = checkpoint_path.replace(".safetensors", "_meta.json")
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                metadata = json.load(f)
+        else:
+            metadata = {}
 
-        # Training metrics embedded in checkpoint
-        val_rmse = checkpoint.get("val_rmse", None)
-        val_pearson = checkpoint.get("val_pearson", None)
-        epoch = checkpoint.get("epoch", None)
+        # Training metrics from metadata
+        val_rmse = metadata.get("val_rmse", None)
+        val_pearson = metadata.get("val_pearson", None)
+        epoch = metadata.get("epoch", None)
 
         if epoch is not None:
             print(f"  Epoch:         {epoch}")
@@ -92,8 +99,8 @@ def main():
             print(f"  RMSE:          {val_rmse:.4f} sigma")
 
         # Additional metadata
-        date_range = checkpoint.get("date_range", None)
-        sample_size = checkpoint.get("sample_size", None)
+        date_range = metadata.get("date_range", None)
+        sample_size = metadata.get("sample_size", None)
         if date_range:
             print(f"  Date range:    {date_range}")
         if sample_size:

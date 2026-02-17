@@ -1,0 +1,160 @@
+{
+  "snr_mean": 0.7226040959358215,
+  "snr_std": 1.6974995136260986,
+  "dnn_dim": 11,
+  "sidecar_hidden": 8,
+  "features": [
+    "distance",
+    "freq_log",
+    "hour_sin",
+    "hour_cos",
+    "az_sin",
+    "az_cos",
+    "lat_diff",
+    "midpoint_lat",
+    "season_sin",
+    "season_cos",
+    "day_night_est",
+    "sfi",
+    "kp_penalty"
+  ],
+  "band_to_hz": {
+    "102": 1836600,
+    "103": 3568600,
+    "104": 5287200,
+    "105": 7038600,
+    "106": 10138700,
+    "107": 14097100,
+    "108": 18104600,
+    "109": 21094600,
+    "110": 24924600,
+    "111": 28124600
+  },
+  "norm_constants": {
+    "102": {
+      "wspr": [
+        -18.04,
+        6.9
+      ],
+      "rbn": [
+        11.86,
+        6.23
+      ]
+    },
+    "103": {
+      "wspr": [
+        -17.9,
+        6.9
+      ],
+      "rbn": [
+        16.94,
+        6.71
+      ]
+    },
+    "104": {
+      "wspr": [
+        -17.6,
+        7.1
+      ],
+      "rbn": [
+        16.91,
+        7.1
+      ]
+    },
+    "105": {
+      "wspr": [
+        -17.34,
+        6.6
+      ],
+      "rbn": [
+        18.36,
+        6.6
+      ]
+    },
+    "106": {
+      "wspr": [
+        -18.07,
+        6.5
+      ],
+      "rbn": [
+        16.96,
+        6.5
+      ]
+    },
+    "107": {
+      "wspr": [
+        -17.53,
+        6.7
+      ],
+      "rbn": [
+        18.47,
+        6.7
+      ]
+    },
+    "108": {
+      "wspr": [
+        -18.35,
+        7.0
+      ],
+      "rbn": [
+        16.66,
+        7.0
+      ]
+    },
+    "109": {
+      "wspr": [
+        -18.32,
+        6.6
+      ],
+      "rbn": [
+        16.37,
+        6.6
+      ]
+    },
+    "110": {
+      "wspr": [
+        -18.76,
+        6.6
+      ],
+      "rbn": [
+        15.07,
+        6.6
+      ]
+    },
+    "111": {
+      "wspr": [
+        -17.86,
+        6.5
+      ],
+      "rbn": [
+        15.79,
+        6.5
+      ]
+    }
+  },
+  "date_range": "2008-03-11 to 2026-02-01",
+  "sample_size": 30902535,
+  "wspr_sample": 20000000,
+  "rbn_dx_upsample": 50,
+  "contest_upsample": 1,
+  "val_rmse": 0.8617047575542551,
+  "val_pearson": 0.4879079759120941,
+  "phase": "V20 Golden Master: V16 Replication",
+  "version": "v20",
+  "architecture": "IonisV12Gate",
+  "data_sources": [
+    "wspr.signatures_v2_terrestrial",
+    "rbn.dxpedition_signatures",
+    "contest.signatures"
+  ],
+  "normalization": "per-source per-band Z-score",
+  "v16_physics_laws": [
+    "IonisV12Gate architecture",
+    "HuberLoss(delta=1.0)",
+    "Gate variance loss",
+    "Defibrillator init",
+    "Weight clamp [0.5, 2.0]"
+  ],
+  "sfi_benefit_normalized": 0.48183202743530273,
+  "storm_cost_normalized": 3.486898422241211
+}

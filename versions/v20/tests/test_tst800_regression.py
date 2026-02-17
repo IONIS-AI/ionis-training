@@ -24,6 +24,7 @@ import sys
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -152,16 +153,16 @@ def test_tst801_reference_prediction(model, device):
         return False
 
 
-def test_tst802_rmse_regression(checkpoint):
-    """TST-802: RMSE Regression — checkpoint RMSE matches documented value."""
+def test_tst802_rmse_regression(metadata):
+    """TST-802: RMSE Regression — metadata RMSE matches documented value."""
     print("\n" + "=" * 60)
     print("TST-802: RMSE Regression")
     print("=" * 60)
 
-    loaded_rmse = checkpoint.get('val_rmse', None)
+    loaded_rmse = metadata.get('val_rmse', None)
 
     if loaded_rmse is None:
-        print("  FAIL: Checkpoint missing 'val_rmse' key")
+        print("  FAIL: Metadata missing 'val_rmse' key")
         return False
 
     delta = abs(loaded_rmse - BASELINE_RMSE)
@@ -180,16 +181,16 @@ def test_tst802_rmse_regression(checkpoint):
         return False
 
 
-def test_tst803_pearson_regression(checkpoint):
-    """TST-803: Pearson Regression — checkpoint Pearson matches documented value."""
+def test_tst803_pearson_regression(metadata):
+    """TST-803: Pearson Regression — metadata Pearson matches documented value."""
     print("\n" + "=" * 60)
     print("TST-803: Pearson Regression")
     print("=" * 60)
 
-    loaded_pearson = checkpoint.get('val_pearson', None)
+    loaded_pearson = metadata.get('val_pearson', None)
 
     if loaded_pearson is None:
-        print("  FAIL: Checkpoint missing 'val_pearson' key")
+        print("  FAIL: Metadata missing 'val_pearson' key")
         return False
 
     delta = abs(loaded_pearson - BASELINE_PEARSON)
@@ -217,9 +218,17 @@ def main():
     print("\n  These tests verify IONIS V20 baselines are unchanged.")
     print("  Failure indicates the model checkpoint was modified.")
 
-    # Load model
+    # Load model (safetensors — no pickle)
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=DEVICE)
+    state_dict = load_safetensors(MODEL_PATH, device=str(DEVICE))
+
+    # Load metadata from companion JSON
+    meta_path = MODEL_PATH.replace(".safetensors", "_meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
 
     model = IonisGate(
         dnn_dim=DNN_DIM,
@@ -228,7 +237,7 @@ def main():
         kp_penalty_idx=KP_PENALTY_IDX,
         gate_init_bias=CONFIG["model"]["gate_init_bias"],
     ).to(DEVICE)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
     print(f"  Device: {DEVICE}")
@@ -237,8 +246,8 @@ def main():
     # Run tests
     results = []
     results.append(("TST-801", "Reference Prediction", test_tst801_reference_prediction(model, DEVICE)))
-    results.append(("TST-802", "RMSE Regression", test_tst802_rmse_regression(checkpoint)))
-    results.append(("TST-803", "Pearson Regression", test_tst803_pearson_regression(checkpoint)))
+    results.append(("TST-802", "RMSE Regression", test_tst802_rmse_regression(metadata)))
+    results.append(("TST-803", "Pearson Regression", test_tst803_pearson_regression(metadata)))
 
     # Summary
     print("\n" + "=" * 60)

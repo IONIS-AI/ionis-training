@@ -20,6 +20,7 @@ import sys
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -410,9 +411,9 @@ def main():
     print("=" * 60)
     print("\n  These tests verify robustness against malicious inputs.")
 
-    # Load model
+    # Load model (safetensors — no pickle)
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=DEVICE)
+    state_dict = load_safetensors(MODEL_PATH, device=str(DEVICE))
 
     model = IonisGate(
         dnn_dim=DNN_DIM,
@@ -421,7 +422,7 @@ def main():
         kp_penalty_idx=KP_PENALTY_IDX,
         gate_init_bias=CONFIG["model"]["gate_init_bias"],
     ).to(DEVICE)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
     print(f"  Device: {DEVICE}")

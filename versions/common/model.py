@@ -13,6 +13,9 @@ Classes:
 Functions:
     get_device() — Universal device selection (CUDA > MPS > CPU)
     load_model() — Load checkpoint and return (model, metadata)
+
+Security:
+    Uses safetensors format — no pickle, no arbitrary code execution.
 """
 
 import json
@@ -23,6 +26,7 @@ import re
 import numpy as np
 import torch
 import torch.nn as nn
+from safetensors.torch import load_file as load_safetensors
 
 
 # ── Device Selection ─────────────────────────────────────────────────────────
@@ -272,17 +276,20 @@ class IonisGate(nn.Module):
 # ── Model Loading ────────────────────────────────────────────────────────────
 
 def load_model(config_path=None, checkpoint_path=None, device=None):
-    """Load an IONIS model from config + checkpoint.
+    """Load an IONIS model from config + safetensors checkpoint.
 
     Args:
         config_path: Path to config JSON. If None, auto-discovers V20 config.
-        checkpoint_path: Path to .pth file. If None, derived from config.
+        checkpoint_path: Path to .safetensors file. If None, derived from config.
         device: torch.device. If None, auto-selects via get_device().
 
     Returns:
-        (model, config, checkpoint) tuple.
+        (model, config, metadata) tuple.
         model is in eval mode on the specified device.
-        checkpoint dict contains training metadata (val_rmse, val_pearson, etc).
+        metadata dict contains training info (val_rmse, val_pearson, etc).
+
+    Security:
+        Uses safetensors format — pure tensor data, no pickle, no code execution.
     """
     if device is None:
         device = get_device()
@@ -295,11 +302,21 @@ def load_model(config_path=None, checkpoint_path=None, device=None):
     with open(config_path) as f:
         config = json.load(f)
 
+    config_dir = os.path.dirname(os.path.abspath(config_path))
+
     if checkpoint_path is None:
-        config_dir = os.path.dirname(os.path.abspath(config_path))
         checkpoint_path = os.path.join(config_dir, config["checkpoint"])
 
-    checkpoint = torch.load(checkpoint_path, weights_only=True, map_location=device)
+    # Load weights via safetensors (no pickle)
+    state_dict = load_safetensors(checkpoint_path, device=str(device))
+
+    # Load metadata from companion JSON
+    meta_path = checkpoint_path.replace(".safetensors", "_meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
 
     model = IonisGate(
         dnn_dim=config["model"]["dnn_dim"],
@@ -308,7 +325,7 @@ def load_model(config_path=None, checkpoint_path=None, device=None):
         kp_penalty_idx=config["model"]["kp_penalty_idx"],
         gate_init_bias=config["model"].get("gate_init_bias"),
     ).to(device)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
-    return model, config, checkpoint
+    return model, config, metadata

@@ -23,6 +23,7 @@ import sys
 
 import numpy as np
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -334,23 +335,23 @@ def test_tst505_numerical_overflow(model, device):
         return False
 
 
-def test_tst506_checkpoint_integrity(model, device, checkpoint):
+def test_tst506_checkpoint_integrity(model, device, metadata):
     """TST-506: Checkpoint Integrity — loaded model matches documented metrics."""
     print("\n" + "=" * 60)
     print("TST-506: Checkpoint Integrity")
     print("=" * 60)
 
-    # Check checkpoint contains expected keys
-    required_keys = ['model_state', 'val_rmse', 'val_pearson']
-    missing_keys = [k for k in required_keys if k not in checkpoint]
+    # Check metadata contains expected keys
+    required_keys = ['val_rmse', 'val_pearson']
+    missing_keys = [k for k in required_keys if k not in metadata]
 
     if missing_keys:
-        print(f"  FAIL: Checkpoint missing keys: {missing_keys}")
+        print(f"  FAIL: Metadata missing keys: {missing_keys}")
         return False
 
     # Verify metrics match documented values
-    loaded_rmse = checkpoint.get('val_rmse', 0)
-    loaded_pearson = checkpoint.get('val_pearson', 0)
+    loaded_rmse = metadata.get('val_rmse', 0)
+    loaded_pearson = metadata.get('val_pearson', 0)
 
     print(f"  Checkpoint RMSE:    {loaded_rmse:.4f} sigma")
     print(f"  Expected RMSE:      {REF_RMSE:.4f} sigma (±{RMSE_TOLERANCE})")
@@ -409,8 +410,8 @@ def test_tst507_device_portability(device):
     predictions = {}
 
     for dev in devices_to_test:
-        # Load model on this device
-        checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=dev)
+        # Load model on this device (safetensors — no pickle)
+        state_dict = load_safetensors(MODEL_PATH, device=str(dev))
         model = IonisGate(
             dnn_dim=DNN_DIM,
             sidecar_hidden=SIDECAR_HIDDEN,
@@ -418,7 +419,7 @@ def test_tst507_device_portability(device):
             kp_penalty_idx=KP_PENALTY_IDX,
             gate_init_bias=CONFIG["model"]["gate_init_bias"],
         ).to(dev)
-        model.load_state_dict(checkpoint['model_state'])
+        model.load_state_dict(state_dict)
         model.eval()
 
         x = make_reference_input(dev)
@@ -456,9 +457,17 @@ def main():
     # Determine device
     device = get_device()
 
-    # Load model
+    # Load model (safetensors — no pickle)
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=device)
+    state_dict = load_safetensors(MODEL_PATH, device=str(device))
+
+    # Load metadata from companion JSON
+    meta_path = MODEL_PATH.replace(".safetensors", "_meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as f:
+            metadata = json.load(f)
+    else:
+        metadata = {}
 
     model = IonisGate(
         dnn_dim=DNN_DIM,
@@ -467,7 +476,7 @@ def main():
         kp_penalty_idx=KP_PENALTY_IDX,
         gate_init_bias=CONFIG["model"]["gate_init_bias"],
     ).to(device)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
     print(f"  Device: {device}")
@@ -480,7 +489,7 @@ def main():
     results.append(("TST-503", "Boundary Values", test_tst503_boundary_values(model, device)))
     results.append(("TST-504", "Null Handling", test_tst504_null_handling(model, device)))
     results.append(("TST-505", "Numerical Overflow", test_tst505_numerical_overflow(model, device)))
-    results.append(("TST-506", "Checkpoint Integrity", test_tst506_checkpoint_integrity(model, device, checkpoint)))
+    results.append(("TST-506", "Checkpoint Integrity", test_tst506_checkpoint_integrity(model, device, metadata)))
     results.append(("TST-507", "Device Portability", test_tst507_device_portability(device)))
 
     # Summary

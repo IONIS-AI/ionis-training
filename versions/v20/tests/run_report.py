@@ -22,6 +22,7 @@ import sys
 from datetime import datetime, timezone
 
 import torch
+from safetensors.torch import load_file as load_safetensors
 
 # ── Path Setup ───────────────────────────────────────────────────────────────
 
@@ -92,14 +93,22 @@ def collect_system_info():
     except FileNotFoundError:
         info["os_release"] = f"{platform.system()} {platform.release()}"
 
-    # Checkpoint info
+    # Checkpoint info (safetensors + metadata JSON — no pickle)
     if os.path.exists(checkpoint_path):
         size_bytes = os.path.getsize(checkpoint_path)
         info["checkpoint_size"] = f"{size_bytes / 1024:.0f} KB"
-        cp = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
-        info["checkpoint_pearson"] = cp.get("val_pearson")
-        info["checkpoint_rmse"] = cp.get("val_rmse")
-        info["checkpoint_epoch"] = cp.get("epoch")
+        # Load metadata from companion JSON
+        meta_path = checkpoint_path.replace(".safetensors", "_meta.json")
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                metadata = json.load(f)
+            info["checkpoint_pearson"] = metadata.get("val_pearson")
+            info["checkpoint_rmse"] = metadata.get("val_rmse")
+            info["checkpoint_epoch"] = metadata.get("epoch")
+        else:
+            info["checkpoint_pearson"] = None
+            info["checkpoint_rmse"] = None
+            info["checkpoint_epoch"] = None
     else:
         info["checkpoint_size"] = "NOT FOUND"
 

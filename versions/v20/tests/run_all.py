@@ -67,7 +67,7 @@ def main():
     print("=" * 70)
     print(f"\n  Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"  Model: IONIS V20")
-    print(f"  Checkpoint: versions/v20/ionis_v20.pth")
+    print(f"  Checkpoint: versions/v20/ionis_v20.safetensors")
     print()
 
     total_tests = sum(count for _, _, _, count in TEST_MODULES)
