@@ -698,7 +698,7 @@ def main():
 
     # Load model
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=DEVICE)
+    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=DEVICE)
 
     model = IonisGate(
         dnn_dim=DNN_DIM,

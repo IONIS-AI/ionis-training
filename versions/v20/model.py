@@ -299,7 +299,7 @@ def load_model(config_path=None, checkpoint_path=None, device=None):
         config_dir = os.path.dirname(os.path.abspath(config_path))
         checkpoint_path = os.path.join(config_dir, config["checkpoint"])
 
-    checkpoint = torch.load(checkpoint_path, weights_only=False, map_location=device)
+    checkpoint = torch.load(checkpoint_path, weights_only=True, map_location=device)
 
     model = IonisGate(
         dnn_dim=config["model"]["dnn_dim"],

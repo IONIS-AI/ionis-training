@@ -77,7 +77,7 @@ def main():
             size_str = f"{size_bytes / 1024:.1f} KB"
         print(f"  File size:     {size_str}")
 
-        checkpoint = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
 
         # Training metrics embedded in checkpoint
         val_rmse = checkpoint.get("val_rmse", None)

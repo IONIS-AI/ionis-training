@@ -96,7 +96,7 @@ def collect_system_info():
     if os.path.exists(checkpoint_path):
         size_bytes = os.path.getsize(checkpoint_path)
         info["checkpoint_size"] = f"{size_bytes / 1024:.0f} KB"
-        cp = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
+        cp = torch.load(checkpoint_path, weights_only=True, map_location="cpu")
         info["checkpoint_pearson"] = cp.get("val_pearson")
         info["checkpoint_rmse"] = cp.get("val_rmse")
         info["checkpoint_epoch"] = cp.get("epoch")

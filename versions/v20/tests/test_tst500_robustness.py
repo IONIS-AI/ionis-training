@@ -410,7 +410,7 @@ def test_tst507_device_portability(device):
 
     for dev in devices_to_test:
         # Load model on this device
-        checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=dev)
+        checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=dev)
         model = IonisGate(
             dnn_dim=DNN_DIM,
             sidecar_hidden=SIDECAR_HIDDEN,
@@ -458,7 +458,7 @@ def main():
 
     # Load model
     print(f"\nLoading {MODEL_PATH}...")
-    checkpoint = torch.load(MODEL_PATH, weights_only=False, map_location=device)
+    checkpoint = torch.load(MODEL_PATH, weights_only=True, map_location=device)
 
     model = IonisGate(
         dnn_dim=DNN_DIM,
