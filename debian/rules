@@ -18,7 +18,8 @@ override_dh_auto_install:
 	install -m 755 bin/ionis-validate $(CURDIR)/debian/ionis-training-validate/usr/bin/
 	install -m 644 versions/v20/model.py $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/
 	install -m 644 versions/v20/config_v20.json $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/
-	install -m 644 versions/v20/ionis_v20.pth $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/
+	install -m 644 versions/v20/ionis_v20.safetensors $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/
+	install -m 644 versions/v20/ionis_v20_meta.json $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/
 	install -m 644 versions/v20/tests/*.py $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/tests/
 	install -m 644 requirements-validate.txt $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/
 

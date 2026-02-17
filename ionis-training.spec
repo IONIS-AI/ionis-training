@@ -76,7 +76,8 @@ install -m 755 bin/ionis-validate %{buildroot}%{_bindir}/
 
 install -m 644 versions/v20/model.py %{buildroot}%{_datadir}/%{name}/versions/v20/
 install -m 644 versions/v20/config_v20.json %{buildroot}%{_datadir}/%{name}/versions/v20/
-install -m 644 versions/v20/ionis_v20.pth %{buildroot}%{_datadir}/%{name}/versions/v20/
+install -m 644 versions/v20/ionis_v20.safetensors %{buildroot}%{_datadir}/%{name}/versions/v20/
+install -m 644 versions/v20/ionis_v20_meta.json %{buildroot}%{_datadir}/%{name}/versions/v20/
 
 for test_script in versions/v20/tests/*.py; do
     install -m 644 "$test_script" %{buildroot}%{_datadir}/%{name}/versions/v20/tests/
@@ -103,7 +104,8 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 %dir %{_datadir}/%{name}/versions/v20/tests
 %{_datadir}/%{name}/versions/v20/model.py
 %{_datadir}/%{name}/versions/v20/config_v20.json
-%{_datadir}/%{name}/versions/v20/ionis_v20.pth
+%{_datadir}/%{name}/versions/v20/ionis_v20.safetensors
+%{_datadir}/%{name}/versions/v20/ionis_v20_meta.json
 %{_datadir}/%{name}/versions/v20/tests/*.py
 %{_datadir}/%{name}/requirements-validate.txt
 
