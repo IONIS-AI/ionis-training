@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_v20.py — IONIS V20 Golden Master Physics Verification
+verify_v20.py — IONIS V20 Physics Verification
 
 Tests:
   1. Storm Sidecar: Kp 0 should have higher SNR than Kp 9
@@ -311,7 +311,7 @@ def test_physics():
     if all_pass:
         print("ALL TESTS PASSED -- Physics constraints enforced")
         print()
-        print("  V20 Golden Master Physics:")
+        print("  IONIS V20 Physics:")
         print(f"    Kp 0->9 storm cost:   {storm_cost:+.3f} sigma ({storm_cost * DB_PER_SIGMA:+.1f} dB)")
         print(f"    SFI 70->200 benefit:  {sun_benefit:+.3f} sigma ({sun_benefit * DB_PER_SIGMA:+.1f} dB)")
         if sun_benefit > 0:

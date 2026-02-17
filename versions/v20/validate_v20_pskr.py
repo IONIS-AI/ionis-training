@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_v20_pskr.py — Validate V20 Golden Master against PSK Reporter live data
+validate_v20_pskr.py — Validate IONIS V20 against PSK Reporter live data
 
 Validates the V20 production model against the PSKR fire hose
 to measure real-world performance on independent data.
@@ -160,7 +160,7 @@ def denormalize_zscore(z_scores, bands, norm_constants):
 
 def validate(limit=100000, mode='FT8'):
     """Run validation against PSKR data."""
-    print(f"V20 Golden Master PSKR Validation")
+    print(f"IONIS V20 PSKR Validation")
     print(f"=" * 60)
     print(f"Model: {MODEL_PATH}")
     print(f"Mode: {mode}")

@@ -9,7 +9,7 @@ Tests:
   TST-802: RMSE Regression (checkpoint matches documented value)
   TST-803: Pearson Regression (checkpoint matches documented value)
 
-These tests lock in V20 Golden Master baselines. Any future model changes
+These tests lock in IONIS V20 baselines. Any future model changes
 should cause these tests to fail, forcing an explicit version bump.
 
 V20 BASELINE VALUES (locked 2026-02-16):
@@ -47,7 +47,7 @@ SIDECAR_HIDDEN = CONFIG["model"]["sidecar_hidden"]
 
 DEVICE = get_device()
 
-# ── V20 Golden Master Baselines ──────────────────────────────────────────────
+# ── IONIS V20 Baselines ──────────────────────────────────────────────
 # These values are locked for V20. Do NOT change unless intentionally
 # releasing a new model version.
 
@@ -214,7 +214,7 @@ def main():
     print("=" * 60)
     print("  IONIS V20 — TST-800 Regression Tests")
     print("=" * 60)
-    print("\n  These tests verify V20 Golden Master baselines are unchanged.")
+    print("\n  These tests verify IONIS V20 baselines are unchanged.")
     print("  Failure indicates the model checkpoint was modified.")
 
     # Load model
@@ -263,7 +263,7 @@ def main():
 
     if passed == total:
         print("\n  ALL TST-800 TESTS PASSED")
-        print("  V20 Golden Master checkpoint verified intact.")
+        print("  IONIS V20 checkpoint verified intact.")
         return 0
     else:
         print(f"\n  {total - passed} TEST(S) FAILED")

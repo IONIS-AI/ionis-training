@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-validate_v20.py — IONIS V20 Golden Master Step I Recall Validation
+validate_v20.py — IONIS V20 Step I Recall Validation
 
 Queries 1M contest paths from validation.step_i_paths, runs V20 inference,
 denormalizes Z-scores to dB using per-band WSPR norm constants,
 applies mode thresholds, and reports recall.
 
-V20 Golden Master: production model recall validation.
+IONIS V20: production model recall validation.
 
 Baselines:
 - VOACAP:    75.82%
@@ -129,7 +129,7 @@ def engineer_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_mhz, month, hour_utc,
 
 def main():
     print("=" * 70)
-    print("  IONIS V20 Golden Master -- Step I Validation")
+    print("  IONIS V20 — Step I Validation")
     print("=" * 70)
     print()
 

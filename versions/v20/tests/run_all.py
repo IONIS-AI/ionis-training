@@ -66,7 +66,7 @@ def main():
     print("  IONIS V20 — Complete Test Suite")
     print("=" * 70)
     print(f"\n  Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  Model: IonisGate V20 Golden Master")
+    print(f"  Model: IONIS V20")
     print(f"  Checkpoint: versions/v20/ionis_v20.pth")
     print()
 
@@ -113,7 +113,7 @@ def main():
         print("  ALL TEST GROUPS PASSED")
         print("  " + "=" * 50)
         print()
-        print("  V20 Golden Master validation complete.")
+        print("  IONIS V20 validation complete.")
         print("  Model is ready for production deployment.")
         print()
         return 0

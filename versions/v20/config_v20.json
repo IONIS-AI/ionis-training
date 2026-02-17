@@ -1,6 +1,6 @@
 {
   "version": "v20",
-  "phase": "Golden Master",
+  "phase": "Production",
   "checkpoint": "ionis_v20.pth",
 
   "model": {

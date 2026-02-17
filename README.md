@@ -4,7 +4,7 @@ PyTorch training and validation for the **IONIS** (Ionospheric Neural Inference 
 
 ## Current Model
 
-**IONIS V20 Production** — Golden Master (IonisGate architecture)
+**IONIS V20** — Production (IonisGate architecture)
 - 203,573 parameters
 - Trained on WSPR (floor) + DXpedition (rare paths) + Contest (ceiling)
 - Config-driven: `versions/v20/config_v20.json`
@@ -22,7 +22,7 @@ PyTorch training and validation for the **IONIS** (Ionospheric Neural Inference 
 ```
 ionis-training/
 ├── versions/           # Self-contained version folders
-│   ├── v20/           # Production golden master
+│   ├── v20/           # IONIS V20 production
 │   ├── common/        # Shared training infrastructure
 │   └── templates/     # New version templates
 ├── scripts/           # Shared utilities

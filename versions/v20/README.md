@@ -1,4 +1,4 @@
-# IONIS V20 — Golden Master
+# IONIS V20 — Production
 
 ## Purpose
 

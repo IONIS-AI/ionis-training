@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-train_v20.py — IONIS V20 Golden Master Training
+train_v20.py — IONIS V20 Training
 
 All configuration loaded from config_v20.json.
 Architecture, features, dataset, and data loading from common/train_common.py.

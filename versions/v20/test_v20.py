@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-test_v20.py — IONIS V20 Golden Master Sensitivity Analysis
+test_v20.py — IONIS V20 Sensitivity Analysis
 
 8 sweeps:
   1. SFI sweep (60->300) with dB delta and monotonicity
@@ -170,7 +170,7 @@ print(f"Normalization: {checkpoint.get('normalization', CONFIG['data']['normaliz
 print(f"RMSE: {checkpoint.get('val_rmse', 0):.4f} sigma, Pearson: {checkpoint.get('val_pearson', 0):+.4f}")
 
 print(f"\n{'='*70}")
-print(f"  IONIS V20 Golden Master -- SNR Sensitivity Analysis")
+print(f"  IONIS V20 — SNR Sensitivity Analysis")
 print(f"  Reference path: {TX_GRID} -> {RX_GRID} ({REF_DISTANCE:.0f} km, 20m)")
 print(f"  Output units: sigma (Z-normalized) -- multiply by {SIGMA_TO_DB} for approx dB")
 print(f"{'='*70}")
