@@ -1,0 +1,31 @@
+Source: ionis-training
+Section: science
+Priority: optional
+Maintainer: Greg Beam <ki7mt@yahoo.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Homepage: https://github.com/IONIS-AI/ionis-training
+Vcs-Git: https://github.com/IONIS-AI/ionis-training.git
+Vcs-Browser: https://github.com/IONIS-AI/ionis-training
+Rules-Requires-Root: no
+
+Package: ionis-training
+Architecture: all
+Depends: ${misc:Depends},
+ python3 (>= 3.9),
+ python3-pip,
+ ionis-core (>= 3.0.0)
+Description: IONIS AI training scripts and model development tools
+ Training scripts, analysis tools, and model development utilities
+ for the IONIS Ionospheric Neural Inference System. Requires ClickHouse
+ access for training data.
+
+Package: ionis-training-validate
+Architecture: all
+Depends: ${misc:Depends},
+ python3 (>= 3.9)
+Description: IONIS AI V20 model validation and inference
+ Self-contained V20 model with 62-test validation battery, single-path
+ prediction, and batch inference. No ClickHouse required — inference only.
+ .
+ Commands: ionis-validate test | predict | custom | adif | info

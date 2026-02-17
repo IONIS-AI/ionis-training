@@ -1,0 +1,9 @@
+ionis-training (3.1.0-1) noble; urgency=medium
+
+  * Initial Debian packaging (dual COPR + PPA)
+  * V20 production model with 62-test validation battery
+  * Base package: training scripts and Modelfile
+  * Validate subpackage: self-contained inference and test suite
+  * Matches RPM ionis-training-3.1.0-1
+
+ -- Greg Beam <ki7mt@yahoo.com>  Mon, 17 Feb 2026 12:00:00 +0000
