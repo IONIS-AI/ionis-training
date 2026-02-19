@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        3.1.3
+Version:        3.2.0
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
