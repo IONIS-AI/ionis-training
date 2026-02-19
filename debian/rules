@@ -11,7 +11,6 @@ override_dh_auto_install:
 	install -d $(CURDIR)/debian/ionis-training/usr/share/ionis-training/scripts
 	install -d $(CURDIR)/debian/ionis-training/usr/share/ionis-training/models
 	install -m 644 scripts/*.py $(CURDIR)/debian/ionis-training/usr/share/ionis-training/scripts/
-	install -m 644 Modelfile $(CURDIR)/debian/ionis-training/usr/share/ionis-training/
 	# Validate subpackage: ionis-training-validate
 	install -d $(CURDIR)/debian/ionis-training-validate/usr/bin
 	install -d $(CURDIR)/debian/ionis-training-validate/usr/share/ionis-training/versions/v20/tests

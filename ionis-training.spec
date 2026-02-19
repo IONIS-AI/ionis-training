@@ -22,9 +22,10 @@ PyTorch-based model predicting HF SNR from WSPR and solar features using
 IonisGate architecture (V20 production).
 
 Scripts:
-  - train_v2_pilot.py:       Training script (queries ClickHouse, builds features, trains)
-  - test_v2_sensitivity.py:  Sensitivity analysis
-  - dashboard.py:            Monitoring and visualization
+  - coverage_heatmap.py:      Global coverage visualization from ClickHouse
+  - signature_search.py:      kNN signature search layer (93M signatures)
+  - voacap_batch_runner.py:   VOACAP batch runner for validation
+  - voacap_quality_test.py:   VOACAP quality-of-prediction test
 
 # ── validate subpackage ─────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ for script in scripts/*.py; do
     install -m 644 "$script" %{buildroot}%{_datadir}/%{name}/scripts/
 done
 
-install -m 644 Modelfile %{buildroot}%{_datadir}/%{name}/
+
 
 # Validate subpackage
 install -d %{buildroot}%{_bindir}
@@ -93,7 +94,6 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 %dir %{_datadir}/%{name}/scripts
 %dir %{_datadir}/%{name}/models
 %{_datadir}/%{name}/scripts/*.py
-%{_datadir}/%{name}/Modelfile
 
 %files validate
 %license COPYING
@@ -111,6 +111,26 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Thu Feb 19 2026 Greg Beam <ki7mt@yahoo.com> - 3.2.0-1
+- Fix IonisV12Gate → IonisGate in v20 meta.json (class name cleanup)
+- Fix v20 README: .pth → .safetensors checkpoint reference
+- Update spec description: replace stale V2-era scripts with current inventory
+- Archive broken scripts (dashboard.py, predict.py, quality_test_ionis.py)
+- Archive stale files (GOAL.md, Modelfile, v10_final.log)
+- Remove shipped Modelfile from RPM (Ollama config, not training artifact)
+- Remove all .pyc files (generated at runtime)
+
+* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.3-1
+- Remove adif command from validate subpackage description
+
+* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.2-1
+- Security: replace pickle checkpoint (.pth) with safetensors format
+- Update spec and debian/rules for ionis_v20.safetensors
+
+* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.1-1
+- Security hardening: weights_only=True for all checkpoint loading
+- Add Debian packaging for Launchpad PPA (debian/ directory)
+
 * Mon Feb 16 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.0-1
 - Add ionis-training-validate subpackage for beta testing
 - Extract model.py from train_common.py (zero ClickHouse dependency)

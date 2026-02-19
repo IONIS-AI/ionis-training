@@ -38,7 +38,7 @@ These constraints are **non-negotiable**:
 
 - `train_v20.py` — Training script
 - `config_v20.json` — Training configuration
-- `ionis_v20.pth` — Checkpoint
+- `ionis_v20.safetensors` — Checkpoint
 - `verify_v20.py` — Physics verification tests
 - `test_v20.py` — Sensitivity analysis
 - `validate_v20.py` — Step I recall validation

@@ -141,7 +141,7 @@
   "val_pearson": 0.4879079759120941,
   "phase": "V20 Golden Master: V16 Replication",
   "version": "v20",
-  "architecture": "IonisV12Gate",
+  "architecture": "IonisGate",
   "data_sources": [
     "wspr.signatures_v2_terrestrial",
     "rbn.dxpedition_signatures",
@@ -149,7 +149,7 @@
   ],
   "normalization": "per-source per-band Z-score",
   "v16_physics_laws": [
-    "IonisV12Gate architecture",
+    "IonisGate architecture",
     "HuberLoss(delta=1.0)",
     "Gate variance loss",
     "Defibrillator init",
