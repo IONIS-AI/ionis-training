@@ -87,7 +87,7 @@ def engineer_features(df, config):
 
     X = np.zeros((len(df), input_dim), dtype=np.float32)
 
-    # Features 0-10: DNN inputs (geography/time)
+    # Features 0-10: Core DNN inputs (geography/time)
     X[:, 0] = distance / 20000.0
     X[:, 1] = np.log10(freq_hz) / 8.0
     X[:, 2] = np.sin(2.0 * np.pi * hour / 24.0)
@@ -100,7 +100,17 @@ def engineer_features(df, config):
     X[:, 9] = np.cos(2.0 * np.pi * month / 12.0)
     X[:, 10] = np.cos(2.0 * np.pi * (hour + midpoint_lon / 15.0) / 24.0)
 
-    # Features 11-12: Sidecar inputs (solar physics)
+    # Feature 11: vertex_lat (V21+) — polar exposure for storm sensitivity
+    # Only included if dnn_dim > 11 (sfi/kp indices shifted accordingly)
+    dnn_dim = config["model"]["dnn_dim"]
+    if dnn_dim >= 12:
+        # vertex_lat = arccos(|sin(azimuth) * cos(tx_lat)|)
+        azimuth_rad = np.radians(azimuth)
+        tx_lat_rad = np.radians(tx_lats)
+        vertex_lat_rad = np.arccos(np.abs(np.sin(azimuth_rad) * np.cos(tx_lat_rad)))
+        X[:, 11] = np.degrees(vertex_lat_rad) / 90.0
+
+    # Sidecar inputs (solar physics) — indices from config
     X[:, sfi_idx] = sfi / 300.0
     X[:, kp_penalty_idx] = 1.0 - kp / 9.0  # kp_penalty
 

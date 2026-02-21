@@ -76,6 +76,30 @@ def azimuth_deg(lat1, lon1, lat2, lon2):
     return (np.degrees(np.arctan2(x, y)) + 360) % 360
 
 
+def vertex_lat_deg(tx_lat, tx_lon, rx_lat, rx_lon):
+    """Compute vertex latitude — highest/lowest point on the great circle path.
+
+    The vertex is the point on the great circle where the path reaches its
+    maximum latitude (Northern Hemisphere) or minimum latitude (Southern).
+    This indicates polar exposure for storm sensitivity.
+
+    Formula: vertex_lat = arccos(|sin(bearing) * cos(tx_lat)|)
+
+    Args:
+        tx_lat, tx_lon: Transmitter coordinates in degrees
+        rx_lat, rx_lon: Receiver coordinates in degrees
+
+    Returns:
+        Vertex latitude in degrees (always positive, 0-90)
+
+    Inspired by WsprDaemon schema (Rob Robinett AI6VN).
+    """
+    bearing_rad = np.radians(azimuth_deg(tx_lat, tx_lon, rx_lat, rx_lon))
+    tx_lat_rad = np.radians(tx_lat)
+    vertex_lat_rad = np.arccos(np.abs(np.sin(bearing_rad) * np.cos(tx_lat_rad)))
+    return np.degrees(vertex_lat_rad)
+
+
 # ── Band Lookup ──────────────────────────────────────────────────────────────
 
 # WSPR dial frequencies in Hz, keyed by common name
@@ -96,11 +120,23 @@ BAND_FREQ_HZ = {
 # ── Feature Builder ──────────────────────────────────────────────────────────
 
 def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
-                   hour_utc, month):
-    """Build a 13-element normalized feature vector for a single path.
+                   hour_utc, month, include_vertex_lat=False):
+    """Build a normalized feature vector for a single path.
+
+    Args:
+        tx_lat, tx_lon: Transmitter coordinates in degrees
+        rx_lat, rx_lon: Receiver coordinates in degrees
+        freq_hz: Frequency in Hz
+        sfi: Solar Flux Index (0-300)
+        kp: Kp index (0-9)
+        hour_utc: Hour of day in UTC (0-23)
+        month: Month of year (1-12)
+        include_vertex_lat: If True, include vertex_lat feature (V21+)
 
     Returns:
-        np.ndarray of shape (13,), dtype float32
+        np.ndarray of shape (13,) or (14,) if include_vertex_lat, dtype float32
+        - V20: 13 features (11 DNN + SFI + Kp)
+        - V21+: 14 features (12 DNN including vertex_lat + SFI + Kp)
     """
     distance_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
     az = azimuth_deg(tx_lat, tx_lon, rx_lat, rx_lon)
@@ -108,7 +144,7 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
     midpoint_lon = (tx_lon + rx_lon) / 2.0
     local_solar_h = hour_utc + midpoint_lon / 15.0
 
-    return np.array([
+    features = [
         distance_km / 20000.0,                              # 0: distance
         np.log10(freq_hz) / 8.0,                            # 1: freq_log
         np.sin(2.0 * np.pi * hour_utc / 24.0),              # 2: hour_sin
@@ -116,13 +152,22 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         np.sin(2.0 * np.pi * az / 360.0),                   # 4: az_sin
         np.cos(2.0 * np.pi * az / 360.0),                   # 5: az_cos
         abs(tx_lat - rx_lat) / 180.0,                       # 6: lat_diff
-        midpoint_lat / 90.0,                                 # 7: midpoint_lat
+        midpoint_lat / 90.0,                                # 7: midpoint_lat
         np.sin(2.0 * np.pi * month / 12.0),                 # 8: season_sin
         np.cos(2.0 * np.pi * month / 12.0),                 # 9: season_cos
         np.cos(2.0 * np.pi * local_solar_h / 24.0),         # 10: day_night_est
-        sfi / 300.0,                                         # 11: sfi
-        1.0 - kp / 9.0,                                     # 12: kp_penalty
-    ], dtype=np.float32)
+    ]
+
+    if include_vertex_lat:
+        v_lat = vertex_lat_deg(tx_lat, tx_lon, rx_lat, rx_lon)
+        features.append(v_lat / 90.0)                       # 11: vertex_lat (V21+)
+        features.append(sfi / 300.0)                        # 12: sfi
+        features.append(1.0 - kp / 9.0)                     # 13: kp_penalty
+    else:
+        features.append(sfi / 300.0)                        # 11: sfi (V20)
+        features.append(1.0 - kp / 9.0)                     # 12: kp_penalty
+
+    return np.array(features, dtype=np.float32)
 
 
 # ── Model Architecture ───────────────────────────────────────────────────────
