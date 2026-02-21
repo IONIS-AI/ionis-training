@@ -1,0 +1,10 @@
+{
+  "version": "v21",
+  "date_range": "2008-03-11 to 2026-02-20",
+  "sample_size": 38760089,
+  "val_rmse": 0.8306861024441934,
+  "val_pearson": 0.46378976106643677,
+  "sfi_benefit": 0.48183202743530273,
+  "storm_cost": 1.2870144844055176,
+  "rbn_full_sample": 0
+}

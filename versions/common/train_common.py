@@ -49,6 +49,27 @@ def grid4_to_latlon_arrays(grids):
 
 # ── Feature Engineering ──────────────────────────────────────────────────────
 
+def _sigmoid(x):
+    """Numpy sigmoid function for endpoint darkness."""
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def compute_endpoint_darkness_vectorized(hour_utc, lon):
+    """
+    Compute darkness factor for endpoints (vectorized).
+
+    Args:
+        hour_utc: array of UTC hours
+        lon: array of longitudes
+
+    Returns:
+        Array of darkness values [0, 1] where 1 = full darkness
+    """
+    local_hour = (hour_utc + lon / 15.0) % 24.0
+    dist_from_noon = np.abs(local_hour - 12.0)
+    return _sigmoid((dist_from_noon - 6.0) * 2.5)
+
+
 def engineer_features(df, config):
     """
     Compute features from signature columns.
@@ -87,7 +108,7 @@ def engineer_features(df, config):
 
     X = np.zeros((len(df), input_dim), dtype=np.float32)
 
-    # Features 0-10: Core DNN inputs (geography/time)
+    # Features 0-9: Core DNN inputs (geography/time) — always present
     X[:, 0] = distance / 20000.0
     X[:, 1] = np.log10(freq_hz) / 8.0
     X[:, 2] = np.sin(2.0 * np.pi * hour / 24.0)
@@ -98,17 +119,38 @@ def engineer_features(df, config):
     X[:, 7] = midpoint_lat / 90.0
     X[:, 8] = np.sin(2.0 * np.pi * month / 12.0)
     X[:, 9] = np.cos(2.0 * np.pi * month / 12.0)
-    X[:, 10] = np.cos(2.0 * np.pi * (hour + midpoint_lon / 15.0) / 24.0)
 
-    # Feature 11: vertex_lat (V21+) — polar exposure for storm sensitivity
-    # Only included if dnn_dim > 11 (sfi/kp indices shifted accordingly)
     dnn_dim = config["model"]["dnn_dim"]
-    if dnn_dim >= 12:
+
+    if dnn_dim >= 13:
+        # V21-beta: Physics gates replace day_night_est
+        # Feature 10: mutual_darkness (tx_darkness × rx_darkness)
+        # Feature 11: mutual_daylight ((1-tx_darkness) × (1-rx_darkness))
+        # Feature 12: vertex_lat
+        tx_darkness = compute_endpoint_darkness_vectorized(hour, tx_lons)
+        rx_darkness = compute_endpoint_darkness_vectorized(hour, rx_lons)
+        X[:, 10] = tx_darkness * rx_darkness                # mutual_darkness
+        X[:, 11] = (1 - tx_darkness) * (1 - rx_darkness)    # mutual_daylight
+
+        # vertex_lat = arccos(|sin(azimuth) * cos(tx_lat)|)
+        azimuth_rad = np.radians(azimuth)
+        tx_lat_rad = np.radians(tx_lats)
+        vertex_lat_rad = np.arccos(np.abs(np.sin(azimuth_rad) * np.cos(tx_lat_rad)))
+        X[:, 12] = np.degrees(vertex_lat_rad) / 90.0
+
+    elif dnn_dim == 12:
+        # V21-alpha: day_night_est + vertex_lat
+        X[:, 10] = np.cos(2.0 * np.pi * (hour + midpoint_lon / 15.0) / 24.0)
+
         # vertex_lat = arccos(|sin(azimuth) * cos(tx_lat)|)
         azimuth_rad = np.radians(azimuth)
         tx_lat_rad = np.radians(tx_lats)
         vertex_lat_rad = np.arccos(np.abs(np.sin(azimuth_rad) * np.cos(tx_lat_rad)))
         X[:, 11] = np.degrees(vertex_lat_rad) / 90.0
+
+    else:
+        # V20 and earlier: day_night_est only
+        X[:, 10] = np.cos(2.0 * np.pi * (hour + midpoint_lon / 15.0) / 24.0)
 
     # Sidecar inputs (solar physics) — indices from config
     X[:, sfi_idx] = sfi / 300.0

@@ -5,18 +5,18 @@
 
   "model": {
     "architecture": "IonisGate",
-    "dnn_dim": 12,
+    "dnn_dim": 13,
     "hidden_dim": 256,
     "sidecar_hidden": 8,
-    "input_dim": 14,
-    "sfi_idx": 12,
-    "kp_penalty_idx": 13,
+    "input_dim": 15,
+    "sfi_idx": 13,
+    "kp_penalty_idx": 14,
     "gate_init_bias": -0.693
   },
 
   "data": {
     "wspr_sample": 20000000,
-    "rbn_full_sample": 20000000,
+    "rbn_full_sample": 0,
     "rbn_dx_upsample": 50,
     "contest_upsample": 1,
     "storm_upsample": 0,
@@ -39,8 +39,8 @@
   "features": [
     "distance", "freq_log", "hour_sin", "hour_cos",
     "az_sin", "az_cos", "lat_diff", "midpoint_lat",
-    "season_sin", "season_cos", "day_night_est", "vertex_lat",
-    "sfi", "kp_penalty"
+    "season_sin", "season_cos", "mutual_darkness", "mutual_daylight",
+    "vertex_lat", "sfi", "kp_penalty"
   ],
 
   "band_to_hz": {

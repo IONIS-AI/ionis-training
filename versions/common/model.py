@@ -117,10 +117,38 @@ BAND_FREQ_HZ = {
 }
 
 
+# ── Physics Gates ───────────────────────────────────────────────────────────
+
+def _sigmoid(x):
+    """Numpy sigmoid function."""
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def compute_endpoint_darkness(hour_utc, lon):
+    """Compute darkness factor for a single endpoint.
+
+    Uses sigmoid with steepness 2.5 to create sharp sunrise/sunset transition.
+    Darkness = 1.0 at night (local hour far from noon), 0.0 during day.
+
+    Args:
+        hour_utc: Hour in UTC (0-23)
+        lon: Longitude in degrees (-180 to 180)
+
+    Returns:
+        Darkness factor (0.0 = daylight, 1.0 = night)
+    """
+    local_hour = (hour_utc + lon / 15.0) % 24.0
+    # Distance from noon (0 at noon, 6 at sunrise/sunset, 12 at midnight)
+    dist_from_noon = abs(local_hour - 12.0)
+    # Sigmoid: darkness kicks in when dist_from_noon > 6 (past sunset/before sunrise)
+    return _sigmoid((dist_from_noon - 6.0) * 2.5)
+
+
 # ── Feature Builder ──────────────────────────────────────────────────────────
 
 def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
-                   hour_utc, month, include_vertex_lat=False):
+                   hour_utc, month, include_vertex_lat=False,
+                   include_physics_gates=False):
     """Build a normalized feature vector for a single path.
 
     Args:
@@ -131,18 +159,26 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         kp: Kp index (0-9)
         hour_utc: Hour of day in UTC (0-23)
         month: Month of year (1-12)
-        include_vertex_lat: If True, include vertex_lat feature (V21+)
+        include_vertex_lat: If True, include vertex_lat feature (V21-alpha+)
+        include_physics_gates: If True, replace day_night_est with
+            mutual_darkness + mutual_daylight (V21-beta+)
 
     Returns:
-        np.ndarray of shape (13,) or (14,) if include_vertex_lat, dtype float32
+        np.ndarray of shape depending on version:
         - V20: 13 features (11 DNN + SFI + Kp)
-        - V21+: 14 features (12 DNN including vertex_lat + SFI + Kp)
+        - V21-alpha: 14 features (12 DNN including vertex_lat + SFI + Kp)
+        - V21-beta: 15 features (13 DNN with physics gates + vertex_lat + SFI + Kp)
+
+    Feature indices for V21-beta (include_physics_gates=True):
+        0: distance, 1: freq_log, 2: hour_sin, 3: hour_cos,
+        4: az_sin, 5: az_cos, 6: lat_diff, 7: midpoint_lat,
+        8: season_sin, 9: season_cos, 10: mutual_darkness, 11: mutual_daylight,
+        12: vertex_lat, 13: sfi, 14: kp_penalty
     """
     distance_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
     az = azimuth_deg(tx_lat, tx_lon, rx_lat, rx_lon)
     midpoint_lat = (tx_lat + rx_lat) / 2.0
     midpoint_lon = (tx_lon + rx_lon) / 2.0
-    local_solar_h = hour_utc + midpoint_lon / 15.0
 
     features = [
         distance_km / 20000.0,                              # 0: distance
@@ -155,16 +191,38 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         midpoint_lat / 90.0,                                # 7: midpoint_lat
         np.sin(2.0 * np.pi * month / 12.0),                 # 8: season_sin
         np.cos(2.0 * np.pi * month / 12.0),                 # 9: season_cos
-        np.cos(2.0 * np.pi * local_solar_h / 24.0),         # 10: day_night_est
     ]
 
-    if include_vertex_lat:
+    if include_physics_gates:
+        # V21-beta: Gemini physics gates (endpoint-specific darkness)
+        tx_darkness = compute_endpoint_darkness(hour_utc, tx_lon)
+        rx_darkness = compute_endpoint_darkness(hour_utc, rx_lon)
+        mutual_darkness = tx_darkness * rx_darkness         # Both ends dark (160m/80m DX)
+        mutual_daylight = (1 - tx_darkness) * (1 - rx_darkness)  # Both ends lit (10m/15m)
+
+        features.append(mutual_darkness)                    # 10: mutual_darkness
+        features.append(mutual_daylight)                    # 11: mutual_daylight
+
+        # vertex_lat always included with physics gates
         v_lat = vertex_lat_deg(tx_lat, tx_lon, rx_lat, rx_lon)
-        features.append(v_lat / 90.0)                       # 11: vertex_lat (V21+)
+        features.append(v_lat / 90.0)                       # 12: vertex_lat
+        features.append(sfi / 300.0)                        # 13: sfi
+        features.append(1.0 - kp / 9.0)                     # 14: kp_penalty
+
+    elif include_vertex_lat:
+        # V21-alpha: vertex_lat only, keep day_night_est
+        local_solar_h = hour_utc + midpoint_lon / 15.0
+        features.append(np.cos(2.0 * np.pi * local_solar_h / 24.0))  # 10: day_night_est
+        v_lat = vertex_lat_deg(tx_lat, tx_lon, rx_lat, rx_lon)
+        features.append(v_lat / 90.0)                       # 11: vertex_lat
         features.append(sfi / 300.0)                        # 12: sfi
         features.append(1.0 - kp / 9.0)                     # 13: kp_penalty
+
     else:
-        features.append(sfi / 300.0)                        # 11: sfi (V20)
+        # V20: original features
+        local_solar_h = hour_utc + midpoint_lon / 15.0
+        features.append(np.cos(2.0 * np.pi * local_solar_h / 24.0))  # 10: day_night_est
+        features.append(sfi / 300.0)                        # 11: sfi
         features.append(1.0 - kp / 9.0)                     # 12: kp_penalty
 
     return np.array(features, dtype=np.float32)

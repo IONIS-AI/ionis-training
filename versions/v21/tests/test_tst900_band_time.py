@@ -42,14 +42,44 @@ from model import IonisGate, get_device, build_features, BAND_FREQ_HZ
 
 # ── Load Config ──────────────────────────────────────────────────────────────
 
-# Initially test against V20 to establish baseline
+# Detect which model to test: prefer v21 if trained, else v20 baseline
+V21_CONFIG = os.path.join(V21_DIR, "config_v21.json")
 V20_DIR = os.path.join(VERSIONS_DIR, "v20")
-CONFIG_PATH = os.path.join(V20_DIR, "config_v20.json")
+V20_CONFIG = os.path.join(V20_DIR, "config_v20.json")
+
+# Check if V21-beta (physics gates) checkpoint exists
+V21_BETA_CKPT = os.path.join(V21_DIR, "ionis_v21.safetensors")
+V21_ALPHA_CKPT = os.path.join(V21_DIR, "ionis_v21_alpha.safetensors")
+
+if os.path.exists(V21_BETA_CKPT):
+    print(f"\nUsing V21-beta checkpoint (physics gates)")
+    CONFIG_PATH = V21_CONFIG
+    MODEL_VERSION = "v21-beta"
+    INCLUDE_PHYSICS_GATES = True
+    INCLUDE_VERTEX_LAT = False  # physics gates implies vertex_lat
+elif os.path.exists(V21_ALPHA_CKPT):
+    print(f"\nUsing V21-alpha checkpoint (vertex_lat only)")
+    CONFIG_PATH = V21_CONFIG
+    MODEL_VERSION = "v21-alpha"
+    INCLUDE_PHYSICS_GATES = False
+    INCLUDE_VERTEX_LAT = True
+else:
+    print(f"\nUsing V20 baseline checkpoint")
+    CONFIG_PATH = V20_CONFIG
+    MODEL_VERSION = "v20"
+    INCLUDE_PHYSICS_GATES = False
+    INCLUDE_VERTEX_LAT = False
 
 with open(CONFIG_PATH) as f:
     CONFIG = json.load(f)
 
-MODEL_PATH = os.path.join(V20_DIR, CONFIG["checkpoint"])
+if MODEL_VERSION == "v21-beta":
+    MODEL_PATH = V21_BETA_CKPT
+elif MODEL_VERSION == "v21-alpha":
+    MODEL_PATH = V21_ALPHA_CKPT
+else:
+    MODEL_PATH = os.path.join(V20_DIR, CONFIG["checkpoint"])
+
 DNN_DIM = CONFIG["model"]["dnn_dim"]
 SFI_IDX = CONFIG["model"]["sfi_idx"]
 KP_PENALTY_IDX = CONFIG["model"]["kp_penalty_idx"]
@@ -72,6 +102,8 @@ def predict(model, device, tx_lat, tx_lon, rx_lat, rx_lon, freq_hz,
     features = build_features(
         tx_lat, tx_lon, rx_lat, rx_lon, freq_hz,
         sfi, kp, hour_utc, month,
+        include_vertex_lat=INCLUDE_VERTEX_LAT,
+        include_physics_gates=INCLUDE_PHYSICS_GATES,
     )
     tensor = torch.tensor([features], dtype=torch.float32, device=device)
     with torch.no_grad():
@@ -504,9 +536,10 @@ def main():
     print("=" * 60)
     print("  IONIS V21 — TST-900 Band×Time Discrimination Tests")
     print("=" * 60)
-    print("\n  Testing V20 model to establish baseline.")
-    print("  These tests document issues discovered on ham-stats.com.")
-    print("  V21 should pass these after time sensitivity improvements.")
+    print(f"\n  Testing: {MODEL_VERSION}")
+    print(f"  Physics Gates: {INCLUDE_PHYSICS_GATES}")
+    print(f"  Vertex Lat: {INCLUDE_VERTEX_LAT or INCLUDE_PHYSICS_GATES}")
+    print("  These tests verify band×time discrimination.")
 
     # Load model (safetensors — no pickle)
     print(f"\nLoading {MODEL_PATH}...")
