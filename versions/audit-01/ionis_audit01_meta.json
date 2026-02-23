@@ -1,0 +1,11 @@
+{
+  "version": "audit-01",
+  "variant": "widen-clamp",
+  "audit": "AUDIT-01: Widen clamp [0.1, 5.0]",
+  "date_range": "2008-03-11 to 2026-02-22",
+  "sample_size": 38760089,
+  "val_rmse": 0.8652972010008275,
+  "val_pearson": 0.3784721791744232,
+  "sfi_benefit": 0.17882156372070312,
+  "storm_cost": 2.1076321601867676
+}

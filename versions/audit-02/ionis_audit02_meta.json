@@ -1,0 +1,11 @@
+{
+  "version": "audit-02",
+  "variant": "xavier-init",
+  "audit": "AUDIT-02: Xavier init (no Defibrillator)",
+  "date_range": "2008-03-11 to 2026-02-22",
+  "sample_size": 38760089,
+  "val_rmse": 0.8365069679875357,
+  "val_pearson": 0.4271546006202698,
+  "sfi_benefit": 0.36393117904663086,
+  "storm_cost": 1.3300395011901855
+}
