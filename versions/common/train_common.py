@@ -30,6 +30,8 @@ import clickhouse_connect
 from model import (  # noqa: F401
     MonotonicMLP, IonisGate, _gate,
     get_device, grid4_to_latlon, build_features,
+    latlon_to_grid4, latlon_to_grid4_array,
+    sfi_bucket, sfi_bucket_to_index,
     BAND_FREQ_HZ, GRID_RE,
 )
 
@@ -47,7 +49,69 @@ def grid4_to_latlon_arrays(grids):
     return lats, lons
 
 
+# ── IRI Atlas Loading ────────────────────────────────────────────────────────
+
+def load_iri_atlas(npz_path):
+    """Load IRI atlas from NumPy archive (CoW-safe).
+
+    The atlas contains pre-computed IRI-2020 parameters (foF2, hmF2, foE)
+    for every grid×hour×month×SFI combination.
+
+    Args:
+        npz_path: Path to iri_lookup.npz
+
+    Returns:
+        (data, grid_index, sfi_buckets) tuple:
+        - data: (31692, 24, 12, 18, 3) float32 array
+        - grid_index: dict mapping grid_4 string to row index
+        - sfi_buckets: [70, 80, ..., 240] array
+
+    Note:
+        NumPy arrays share across fork() workers without copying.
+        2 GB total, not 120 GB with Python dict.
+    """
+    npz = np.load(npz_path, allow_pickle=True)
+    data = npz["data"]                      # (31692, 24, 12, 18, 3) float32
+    grid_index = npz["grid_index"].item()   # dict: grid_4 -> int
+    sfi_buckets = npz["sfi_buckets"]        # [70, 80, ..., 240]
+    log.info(f"IRI atlas loaded: {data.shape}, {data.nbytes / 1e6:.0f} MB")
+    return data, grid_index, sfi_buckets
+
+
 # ── Feature Engineering ──────────────────────────────────────────────────────
+
+def solar_elevation_vectorized(lat, lon, hour_utc, day_of_year):
+    """
+    Compute solar elevation angle in degrees (vectorized).
+
+    Positive = sun above horizon (daylight)
+    Negative = sun below horizon (night)
+
+    Args:
+        lat: array of latitudes in degrees
+        lon: array of longitudes in degrees
+        hour_utc: array of UTC hours
+        day_of_year: array of day-of-year values (1-366)
+
+    Returns:
+        Array of solar elevation angles in degrees (-90 to +90)
+    """
+    # Solar declination
+    dec = -23.44 * np.cos(np.radians(360.0 / 365.0 * (day_of_year + 10)))
+    dec_r = np.radians(dec)
+    lat_r = np.radians(lat)
+
+    # Hour angle
+    solar_hour = hour_utc + lon / 15.0
+    ha_r = np.radians((solar_hour - 12.0) * 15.0)
+
+    # Solar elevation
+    sin_elev = (np.sin(lat_r) * np.sin(dec_r) +
+                np.cos(lat_r) * np.cos(dec_r) * np.cos(ha_r))
+    sin_elev = np.clip(sin_elev, -1.0, 1.0)
+
+    return np.degrees(np.arcsin(sin_elev))
+
 
 def _sigmoid(x):
     """Numpy sigmoid function for endpoint darkness."""
@@ -122,7 +186,90 @@ def engineer_features(df, config):
 
     dnn_dim = config["model"]["dnn_dim"]
 
-    if dnn_dim >= 13:
+    if dnn_dim >= 15:
+        # V22: Solar elevation with band×darkness cross-products
+        # Feature 10: vertex_lat
+        # Feature 11-12: tx_solar_dep, rx_solar_dep
+        # Feature 13-14: freq_x_tx_dark, freq_x_rx_dark
+
+        # Get day_of_year from DataFrame (must be added to query)
+        if 'day_of_year' in df.columns:
+            day_of_year = df['day_of_year'].values.astype(np.float32)
+        else:
+            # Fallback: approximate from month (mid-month)
+            log.warning("day_of_year not in DataFrame, using mid-month approximation")
+            day_of_year = (month - 1) * 30.5 + 15
+
+        # vertex_lat (index 10)
+        azimuth_rad = np.radians(azimuth)
+        tx_lat_rad = np.radians(tx_lats)
+        vertex_lat_rad = np.arccos(np.abs(np.sin(azimuth_rad) * np.cos(tx_lat_rad)))
+        X[:, 10] = np.degrees(vertex_lat_rad) / 90.0
+
+        # Solar elevation at each endpoint (positive=day, negative=night)
+        tx_solar = solar_elevation_vectorized(tx_lats, tx_lons, hour, day_of_year)
+        rx_solar = solar_elevation_vectorized(rx_lats, rx_lons, hour, day_of_year)
+        X[:, 11] = tx_solar / 90.0                          # tx_solar_dep normalized
+        X[:, 12] = rx_solar / 90.0                          # rx_solar_dep normalized
+
+        # Cross-products: band × darkness interaction
+        # Centered around 10 MHz pivot — the ionospheric D/F-layer transition
+        # Below 10 MHz: darkness helps (D-layer absorption vanishes)
+        # Above 10 MHz: darkness kills (F-layer refraction vanishes)
+        #
+        # ASYMMETRIC SCALING (V22-gamma):
+        # Linear pivot gave +0.90 for 10m but only -0.41 for 160m, causing
+        # optimizer to ignore low bands (gradient signal 2x weaker).
+        # Fix: scale both ends to exactly ±1.0 for equal gradient weight.
+        freq_mhz = freq_hz / 1e6
+        freq_centered = np.where(
+            freq_mhz >= 10.0,
+            (freq_mhz - 10.0) / 18.0,   # 10m (28 MHz) -> +1.0
+            (freq_mhz - 10.0) / 8.2     # 160m (1.8 MHz) -> -1.0
+        )
+        X[:, 13] = freq_centered * X[:, 11]                 # freq_x_tx_dark
+        X[:, 14] = freq_centered * X[:, 12]                 # freq_x_rx_dark
+
+        # V23: IRI features (foF2, hmF2, foE)
+        if dnn_dim >= 18:
+            iri_data = config.get("_iri_data")
+            iri_grid_index = config.get("_iri_grid_index")
+
+            if iri_data is None or iri_grid_index is None:
+                raise ValueError("V23 (dnn_dim>=18) requires IRI atlas. "
+                                 "Load via load_iri_atlas() and set config['_iri_data'] and config['_iri_grid_index']")
+
+            # Compute midpoint grids
+            mid_lats = (tx_lats + rx_lats) / 2.0
+            mid_lons = (tx_lons + rx_lons) / 2.0
+            mid_grids = latlon_to_grid4_array(mid_lats, mid_lons)
+
+            # Convert SFI to bucket index (0-17)
+            sfi_raw = df['avg_sfi'].values.astype(np.float32)
+            sfi_idxs = np.clip(np.round(sfi_raw / 10).astype(int) - 7, 0, 17)
+
+            # Month to 0-indexed
+            month_idxs = month.astype(int) - 1
+
+            # Hour as int
+            hour_int = hour.astype(int) % 24
+
+            # Vectorized grid index lookup (default to index 0 for missing)
+            grid_idxs = np.array([iri_grid_index.get(g, 0) for g in mid_grids])
+
+            # Batch array indexing — no Python loop per row
+            # iri_data shape: (N_grids, 24, 12, 18, 3) = (grid, hour, month, sfi_bucket, [foF2, hmF2, foE])
+            iri_vals = iri_data[grid_idxs, hour_int, month_idxs, sfi_idxs, :]
+            foF2_mid = iri_vals[:, 0]   # MHz
+            hmF2_mid = iri_vals[:, 1]   # km
+            foE_mid  = iri_vals[:, 2]   # MHz
+
+            # foF2_freq_ratio is THE feature: when > 1, operating freq < MUF
+            X[:, 15] = foF2_mid / freq_mhz                  # foF2_freq_ratio
+            X[:, 16] = foE_mid / 10.0                       # foE_mid normalized
+            X[:, 17] = hmF2_mid / 500.0                     # hmF2_mid normalized
+
+    elif dnn_dim >= 13:
         # V21-beta: Physics gates replace day_night_est
         # Feature 10: mutual_darkness (tx_darkness × rx_darkness)
         # Feature 11: mutual_daylight ((1-tx_darkness) × (1-rx_darkness))
@@ -250,18 +397,35 @@ class SignatureDataset(Dataset):
 
 # ── Data Loading ─────────────────────────────────────────────────────────────
 
-def load_source_data(client, table, sample_size=None, where_clause="avg_sfi > 0"):
-    """Load signature data from a ClickHouse table."""
+def load_source_data(client, table, sample_size=None, where_clause="avg_sfi > 0",
+                     include_day_of_year=False):
+    """Load signature data from a ClickHouse table.
 
+    Args:
+        client: ClickHouse client
+        table: Table name (e.g., 'wspr.signatures_v2_terrestrial')
+        sample_size: Optional limit on rows to load
+        where_clause: SQL WHERE clause
+        include_day_of_year: If True, compute day_of_year from month (V22+)
+            Note: Signature tables are aggregated and don't have timestamp.
+            We use mid-month approximation: doy = (month - 1) * 30.5 + 15
+
+    Returns:
+        DataFrame with signature data
+    """
     count = client.command(f"SELECT count() FROM {table}")
     log.info(f"{table}: {count:,} rows available")
 
     limit = f" LIMIT {sample_size}" if sample_size else ""
     order = " ORDER BY rand()" if sample_size else ""
 
+    # V22+: Compute day_of_year from month (mid-month approximation)
+    # Signature tables are aggregated by hour/month, no raw timestamp available
+    doy_col = ", toUInt16((month - 1) * 30.5 + 15) AS day_of_year" if include_day_of_year else ""
+
     query = f"""
     SELECT
-        tx_grid_4, rx_grid_4, band, hour, month,
+        tx_grid_4, rx_grid_4, band, hour, month{doy_col},
         median_snr, spot_count, snr_std, reliability,
         avg_sfi, avg_kp, avg_distance, avg_azimuth
     FROM {table}

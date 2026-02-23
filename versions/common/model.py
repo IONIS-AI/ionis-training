@@ -55,6 +55,41 @@ def grid4_to_latlon(g):
     return lat, lon
 
 
+def latlon_to_grid4(lat, lon):
+    """Convert (lat, lon) to 4-char Maidenhead grid.
+
+    At 4-char resolution (2 deg x 1 deg), arithmetic midpoint is fine.
+    No haversine needed.
+    """
+    lon = (lon + 180) % 360
+    lat = lat + 90
+    a = int(lon / 20)
+    b = int(lat / 10)
+    c = int((lon - a * 20) / 2)
+    d = int(lat - b * 10)
+    return f"{chr(65+a)}{chr(65+b)}{c}{d}"
+
+
+def latlon_to_grid4_array(lats, lons):
+    """Vectorized conversion of lat/lon arrays to grid4 strings."""
+    return np.array([latlon_to_grid4(lat, lon) for lat, lon in zip(lats, lons)])
+
+
+# ── SFI Bucket Utilities (IRI Atlas) ─────────────────────────────────────────
+
+def sfi_bucket(raw_sfi):
+    """Quantize raw SFI to the bucket used in IRI atlas.
+
+    IRI atlas uses SFI buckets: 70, 80, 90, ..., 240 (18 values).
+    """
+    return int(np.clip(np.round(raw_sfi / 10) * 10, 70, 240))
+
+
+def sfi_bucket_to_index(bucket):
+    """Convert SFI bucket value to array index (0-17)."""
+    return int(np.clip(bucket // 10 - 7, 0, 17))
+
+
 # ── Geo Helpers ──────────────────────────────────────────────────────────────
 
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -117,7 +152,58 @@ BAND_FREQ_HZ = {
 }
 
 
-# ── Physics Gates ───────────────────────────────────────────────────────────
+# ── Solar Position ──────────────────────────────────────────────────────────
+
+def solar_elevation_deg(lat, lon, hour_utc, day_of_year):
+    """
+    Compute solar elevation angle in degrees.
+
+    Positive = sun above horizon (daylight)
+    Negative = sun below horizon (night)
+
+    Physical thresholds the model should learn:
+        > 0°:       Daylight — D-layer absorbing, F-layer ionized
+        0° to -6°:  Civil twilight — D-layer weakening
+        -6° to -12°: Nautical twilight — D-layer collapsed, F-layer residual (greyline)
+        -12° to -18°: Astronomical twilight — F-layer fading
+        < -18°:     Night — F-layer decayed
+
+    Args:
+        lat: Latitude in degrees (-90 to 90)
+        lon: Longitude in degrees (-180 to 180)
+        hour_utc: Hour of day in UTC (0-23, can be float)
+        day_of_year: Day of year (1-366)
+
+    Returns:
+        Solar elevation angle in degrees (-90 to +90)
+
+    Note: Uses simplified solar position equations. Accuracy is ~1° which is
+    sufficient for ionospheric modeling. For CUDA port, use sinf/cosf/asinf.
+    """
+    # Solar declination (simplified equation)
+    # Max +23.44° at summer solstice (doy ~172), min -23.44° at winter solstice
+    dec = -23.44 * math.cos(math.radians(360.0 / 365.0 * (day_of_year + 10)))
+    dec_r = math.radians(dec)
+    lat_r = math.radians(lat)
+
+    # Hour angle: degrees from solar noon
+    # Solar noon occurs when sun crosses local meridian
+    solar_hour = hour_utc + lon / 15.0  # Local solar time
+    hour_angle = (solar_hour - 12.0) * 15.0  # 15 deg per hour from noon
+    ha_r = math.radians(hour_angle)
+
+    # Solar elevation (altitude) formula
+    sin_elev = (math.sin(lat_r) * math.sin(dec_r) +
+                math.cos(lat_r) * math.cos(dec_r) * math.cos(ha_r))
+
+    # Clamp to valid range for arcsin
+    sin_elev = max(-1.0, min(1.0, sin_elev))
+    elevation = math.degrees(math.asin(sin_elev))
+
+    return elevation
+
+
+# ── Physics Gates (V21-beta, superseded by solar_elevation in V22) ──────────
 
 def _sigmoid(x):
     """Numpy sigmoid function."""
@@ -147,8 +233,10 @@ def compute_endpoint_darkness(hour_utc, lon):
 # ── Feature Builder ──────────────────────────────────────────────────────────
 
 def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
-                   hour_utc, month, include_vertex_lat=False,
-                   include_physics_gates=False):
+                   hour_utc, month, day_of_year=None,
+                   include_vertex_lat=False,
+                   include_physics_gates=False,
+                   include_solar_depression=False):
     """Build a normalized feature vector for a single path.
 
     Args:
@@ -159,15 +247,27 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         kp: Kp index (0-9)
         hour_utc: Hour of day in UTC (0-23)
         month: Month of year (1-12)
+        day_of_year: Day of year (1-366). Required for V22+.
         include_vertex_lat: If True, include vertex_lat feature (V21-alpha+)
         include_physics_gates: If True, replace day_night_est with
-            mutual_darkness + mutual_daylight (V21-beta+)
+            mutual_darkness + mutual_daylight (V21-beta)
+        include_solar_depression: If True, use solar elevation angles with
+            band×darkness cross-products (V22+). Requires day_of_year.
 
     Returns:
         np.ndarray of shape depending on version:
         - V20: 13 features (11 DNN + SFI + Kp)
         - V21-alpha: 14 features (12 DNN including vertex_lat + SFI + Kp)
         - V21-beta: 15 features (13 DNN with physics gates + vertex_lat + SFI + Kp)
+        - V22: 17 features (15 DNN with solar_dep + cross-products + SFI + Kp)
+
+    Feature indices for V22 (include_solar_depression=True):
+        0: distance, 1: freq_log, 2: hour_sin, 3: hour_cos,
+        4: az_sin, 5: az_cos, 6: lat_diff, 7: midpoint_lat,
+        8: season_sin, 9: season_cos, 10: vertex_lat,
+        11: tx_solar_dep, 12: rx_solar_dep,
+        13: freq_x_tx_dark, 14: freq_x_rx_dark,
+        15: sfi, 16: kp_penalty
 
     Feature indices for V21-beta (include_physics_gates=True):
         0: distance, 1: freq_log, 2: hour_sin, 3: hour_cos,
@@ -193,7 +293,45 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         np.cos(2.0 * np.pi * month / 12.0),                 # 9: season_cos
     ]
 
-    if include_physics_gates:
+    if include_solar_depression:
+        # V22: Solar elevation angles with band×darkness cross-products
+        if day_of_year is None:
+            raise ValueError("day_of_year required for V22 (include_solar_depression=True)")
+
+        # vertex_lat first (index 10)
+        v_lat = vertex_lat_deg(tx_lat, tx_lon, rx_lat, rx_lon)
+        features.append(v_lat / 90.0)                       # 10: vertex_lat
+
+        # Solar elevation at each endpoint (positive=day, negative=night)
+        tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour_utc, day_of_year)
+        rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour_utc, day_of_year)
+        tx_solar_norm = tx_solar / 90.0                     # Normalize to [-1, 1]
+        rx_solar_norm = rx_solar / 90.0
+
+        features.append(tx_solar_norm)                      # 11: tx_solar_dep
+        features.append(rx_solar_norm)                      # 12: rx_solar_dep
+
+        # Cross-products: band × darkness interaction
+        # Centered around 10 MHz pivot — the ionospheric D/F-layer transition
+        # Below 10 MHz: darkness helps (D-layer absorption vanishes)
+        # Above 10 MHz: darkness kills (F-layer refraction vanishes)
+        #
+        # ASYMMETRIC SCALING (V22-gamma):
+        # Linear pivot gave +0.90 for 10m but only -0.41 for 160m, causing
+        # optimizer to ignore low bands (gradient signal 2x weaker).
+        # Fix: scale both ends to exactly ±1.0 for equal gradient weight.
+        freq_mhz = freq_hz / 1e6
+        if freq_mhz >= 10.0:
+            freq_centered = (freq_mhz - 10.0) / 18.0   # 10m (28 MHz) -> +1.0
+        else:
+            freq_centered = (freq_mhz - 10.0) / 8.2    # 160m (1.8 MHz) -> -1.0
+        features.append(freq_centered * tx_solar_norm)      # 13: freq_x_tx_dark
+        features.append(freq_centered * rx_solar_norm)      # 14: freq_x_rx_dark
+
+        features.append(sfi / 300.0)                        # 15: sfi
+        features.append(1.0 - kp / 9.0)                     # 16: kp_penalty
+
+    elif include_physics_gates:
         # V21-beta: Gemini physics gates (endpoint-specific darkness)
         tx_darkness = compute_endpoint_darkness(hour_utc, tx_lon)
         rx_darkness = compute_endpoint_darkness(hour_utc, rx_lon)

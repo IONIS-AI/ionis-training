@@ -1,0 +1,11 @@
+{
+  "version": "v23",
+  "date_range": "2008-03-11 to 2026-02-22",
+  "sample_size": 38760089,
+  "val_rmse": 0.812601494321834,
+  "val_pearson": 0.4996604025363922,
+  "sfi_benefit": 0.48183202743530273,
+  "storm_cost": 2.569265365600586,
+  "rbn_full_sample": 0,
+  "iri_atlas": "data/iri_lookup.npz"
+}
