@@ -1,0 +1,12 @@
+{
+  "run_id": "c0e64d94-e27c-43f7-9464-269d0aa5803c",
+  "version": "v24",
+  "variant": "alpha",
+  "best_epoch": 100,
+  "val_rmse": 0.7771402990858469,
+  "val_pearson": 0.5433338284492493,
+  "storm_cost": 1.0720171928405762,
+  "date_range": "2008-03-11 to 2026-02-22",
+  "train_rows": 31008072,
+  "val_rows": 7752017
+}

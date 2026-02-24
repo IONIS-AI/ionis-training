@@ -1,0 +1,13 @@
+{
+  "version": "audit-03",
+  "variant": "35-bucket-atlas",
+  "audit": "AUDIT-03: 35-bucket IRI atlas (5-unit SFI steps)",
+  "date_range": "2008-03-11 to 2026-02-22",
+  "sample_size": 38760089,
+  "val_rmse": 0.8111795636301324,
+  "val_pearson": 0.4901750385761261,
+  "sfi_benefit": 0.48183202743530273,
+  "storm_cost": 2.9310245513916016,
+  "iri_atlas": "data/iri_lookup_35.npz",
+  "sfi_buckets": 35
+}
