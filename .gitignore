@@ -20,3 +20,10 @@ __pycache__/
 
 # OS
 .DS_Store
+*.safetensors
+results/*.log
+*.safetensors
+results/*.log
+*.safetensors
+results/*.log
+*_meta.json
