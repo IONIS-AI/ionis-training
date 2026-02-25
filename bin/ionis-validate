@@ -1,17 +1,15 @@
 #!/bin/bash
-# ionis-validate — IONIS V20 Model Validation CLI
+# ionis-validate — IONIS V22-gamma + PhysicsOverrideLayer Validation CLI
 #
 # Installed by the ionis-training-validate RPM subpackage.
 # Runs validation tests, single predictions, and custom path tests
-# against the V20 production model.
+# against the V22-gamma production model with PhysicsOverrideLayer.
 #
 # Usage:
-#   ionis-validate test              Run full 62-test validation suite
+#   ionis-validate test              Run KI7MT + TST-900 validation suite
 #   ionis-validate predict [args]    Predict a single HF path
 #   ionis-validate custom <file>     Batch custom path tests from JSON
 #   ionis-validate info              Show model and system information
-#   ionis-validate adif <file> [opts]  Validate model against your ADIF QSO log
-#   ionis-validate report [--custom]  Generate a beta test report for GitHub Issues
 #   ionis-validate help              Show this help
 
 set -euo pipefail
@@ -24,33 +22,27 @@ if [ -n "${IONIS_TRAINING_DIR:-}" ]; then
     INSTALL_DIR="$IONIS_TRAINING_DIR"
 fi
 
-TESTS_DIR="$INSTALL_DIR/versions/v20/tests"
+TESTS_DIR="$INSTALL_DIR/versions/v22/tests"
 
 usage() {
     cat <<'EOF'
-IONIS V20 Model Validation CLI
+IONIS V22-gamma + PhysicsOverrideLayer Validation CLI
 
 Usage:
   ionis-validate <command> [options]
 
 Commands:
-  test              Run full 62-test validation suite (TST-100 through TST-800)
+  test              Run KI7MT override (17/17) + TST-900 band x time tests
   predict [args]    Predict SNR for a single HF propagation path
   custom <file>     Run batch custom path tests from a JSON file
-  adif <file>       Validate model against your ADIF QSO log (eQSL/LoTW/QRZ export)
-  report [opts]     Generate a beta test report for GitHub Issues
   info              Show model version, checkpoint, and system information
   help              Show this help message
 
 Examples:
   ionis-validate test
   ionis-validate predict --tx-grid FN20 --rx-grid IO91 --band 20m --sfi 150 --kp 2 --hour 14 --month 6
+  ionis-validate predict --tx-grid DN13 --rx-grid JN48 --band 10m --sfi 150 --kp 2 --hour 2 --month 2 --day-of-year 45
   ionis-validate custom my_paths.json
-  ionis-validate adif my_log.adi --my-grid DN26
-  ionis-validate adif my_log.adi --my-grid DN26 --export observations.json
-  ionis-validate report                         # system info + test results
-  ionis-validate report --custom my_paths.json  # include custom path results
-  ionis-validate report --skip-tests            # system info only (fast)
   ionis-validate info
 
 Environment:
@@ -70,14 +62,6 @@ case "${1:-help}" in
     custom)
         shift
         exec "$PYTHON" "$TESTS_DIR/run_custom.py" "$@"
-        ;;
-    adif)
-        shift
-        exec "$PYTHON" "$TESTS_DIR/run_adif.py" "$@"
-        ;;
-    report)
-        shift
-        exec "$PYTHON" "$TESTS_DIR/run_report.py" "$@"
         ;;
     info)
         exec "$PYTHON" "$TESTS_DIR/run_info.py"

@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        3.2.0
+Version:        4.0.0
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -19,7 +19,7 @@ Requires:       ionis-core >= 3.0.0
 %description
 IONIS (Ionospheric Neural Inference System) training and analysis scripts.
 PyTorch-based model predicting HF SNR from WSPR and solar features using
-IonisGate architecture (V20 production).
+IonisGate architecture (V22-gamma production + PhysicsOverrideLayer).
 
 Scripts:
   - coverage_heatmap.py:      Global coverage visualization from ClickHouse
@@ -30,22 +30,24 @@ Scripts:
 # ── validate subpackage ─────────────────────────────────────────────────────
 
 %package validate
-Summary:        IONIS V20 Model Validation Suite
+Summary:        IONIS V22-gamma + PhysicsOverrideLayer Validation Suite
 Requires:       python3 >= 3.9
 
 %description validate
-Standalone validation suite for the IONIS V20 HF propagation model.
-Includes 62-test automated battery, custom path testing, and single-prediction
-CLI. No ClickHouse or training infrastructure required.
+Standalone validation suite for the IONIS V22-gamma HF propagation model
+with PhysicsOverrideLayer (17/17 KI7MT hard pass, TST-900 9/11).
+
+Includes KI7MT operator-grounded test battery, TST-900 band x time
+discrimination tests, single-path prediction with physics override,
+and batch custom path testing. No ClickHouse required — inference only.
 
 Install dependencies:
   pip3 install -r /usr/share/ionis-training/requirements-validate.txt
 
 Commands:
-  ionis-validate test              Run 62-test validation suite
+  ionis-validate test              Run KI7MT + TST-900 validation suite
   ionis-validate predict [args]    Predict a single HF path
   ionis-validate custom <file>     Batch custom path tests from JSON
-  ionis-validate report [opts]     Generate a beta test report for GitHub Issues
   ionis-validate info              Show model and system information
 
 # ── build ────────────────────────────────────────────────────────────────────
@@ -69,19 +71,21 @@ done
 
 # Validate subpackage
 install -d %{buildroot}%{_bindir}
-install -d %{buildroot}%{_datadir}/%{name}/versions/v20
-install -d %{buildroot}%{_datadir}/%{name}/versions/v20/tests
+install -d %{buildroot}%{_datadir}/%{name}/versions/v22
+install -d %{buildroot}%{_datadir}/%{name}/versions/v22/tests
 
 install -m 755 bin/ionis-validate %{buildroot}%{_bindir}/
 
-install -m 644 versions/v20/model.py %{buildroot}%{_datadir}/%{name}/versions/v20/
-install -m 644 versions/v20/config_v20.json %{buildroot}%{_datadir}/%{name}/versions/v20/
-install -m 644 versions/v20/ionis_v20.safetensors %{buildroot}%{_datadir}/%{name}/versions/v20/
-install -m 644 versions/v20/ionis_v20_meta.json %{buildroot}%{_datadir}/%{name}/versions/v20/
+install -m 644 versions/v22/model.py %{buildroot}%{_datadir}/%{name}/versions/v22/
+install -m 644 versions/v22/physics_override.py %{buildroot}%{_datadir}/%{name}/versions/v22/
+install -m 644 versions/v22/config_v22.json %{buildroot}%{_datadir}/%{name}/versions/v22/
+install -m 644 versions/v22/ionis_v22_gamma.safetensors %{buildroot}%{_datadir}/%{name}/versions/v22/
+install -m 644 versions/v22/ionis_v22_gamma_meta.json %{buildroot}%{_datadir}/%{name}/versions/v22/
 
-for test_script in versions/v20/tests/*.py; do
-    install -m 644 "$test_script" %{buildroot}%{_datadir}/%{name}/versions/v20/tests/
+for test_script in versions/v22/tests/*.py; do
+    install -m 644 "$test_script" %{buildroot}%{_datadir}/%{name}/versions/v22/tests/
 done
+install -m 644 versions/v22/tests/ki7mt_test_paths.json %{buildroot}%{_datadir}/%{name}/versions/v22/tests/
 
 install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 
@@ -99,18 +103,29 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 %license COPYING
 %{_bindir}/ionis-validate
 %dir %{_datadir}/%{name}/versions
-%dir %{_datadir}/%{name}/versions/v20
-%dir %{_datadir}/%{name}/versions/v20/tests
-%{_datadir}/%{name}/versions/v20/model.py
-%{_datadir}/%{name}/versions/v20/config_v20.json
-%{_datadir}/%{name}/versions/v20/ionis_v20.safetensors
-%{_datadir}/%{name}/versions/v20/ionis_v20_meta.json
-%{_datadir}/%{name}/versions/v20/tests/*.py
+%dir %{_datadir}/%{name}/versions/v22
+%dir %{_datadir}/%{name}/versions/v22/tests
+%{_datadir}/%{name}/versions/v22/model.py
+%{_datadir}/%{name}/versions/v22/physics_override.py
+%{_datadir}/%{name}/versions/v22/config_v22.json
+%{_datadir}/%{name}/versions/v22/ionis_v22_gamma.safetensors
+%{_datadir}/%{name}/versions/v22/ionis_v22_gamma_meta.json
+%{_datadir}/%{name}/versions/v22/tests/*.py
+%{_datadir}/%{name}/versions/v22/tests/ki7mt_test_paths.json
 %{_datadir}/%{name}/requirements-validate.txt
 
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Tue Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.0-1
+- Upgrade validate subpackage from V20 to V22-gamma + PhysicsOverrideLayer
+- V22-gamma: 17/17 KI7MT hard pass (with override), TST-900 9/11
+- PhysicsOverrideLayer: deterministic clamp for high-band night closure
+- New test suite: KI7MT operator-grounded tests + TST-900 band x time
+- Add --day-of-year to predict command (V22 solar depression features)
+- Version-lock V22: model.py, physics_override.py, config, checkpoint
+- Remove adif/report commands (deferred to future release)
+
 * Thu Feb 19 2026 Greg Beam <ki7mt@yahoo.com> - 3.2.0-1
 - Fix IonisV12Gate → IonisGate in v20 meta.json (class name cleanup)
 - Fix v20 README: .pth → .safetensors checkpoint reference

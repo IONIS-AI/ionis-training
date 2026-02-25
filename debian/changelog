@@ -1,3 +1,15 @@
+ionis-training (4.0.0-1) noble; urgency=medium
+
+  * Upgrade validate subpackage from V20 to V22-gamma + PhysicsOverrideLayer
+  * V22-gamma: 17/17 KI7MT hard pass (with override), TST-900 9/11
+  * PhysicsOverrideLayer: deterministic clamp for high-band night closure
+  * New test suite: KI7MT operator-grounded tests + TST-900 band x time
+  * Add --day-of-year to predict command (V22 solar depression features)
+  * Version-lock V22: model.py, physics_override.py, config, checkpoint
+  * Remove adif/report commands (deferred to future release)
+
+ -- Greg Beam <ki7mt@yahoo.com>  Tue, 25 Feb 2026 12:00:00 +0000
+
 ionis-training (3.1.0-1) noble; urgency=medium
 
   * Initial Debian packaging (dual COPR + PPA)

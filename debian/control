@@ -24,8 +24,9 @@ Package: ionis-training-validate
 Architecture: all
 Depends: ${misc:Depends},
  python3 (>= 3.9)
-Description: IONIS AI V20 model validation and inference
- Self-contained V20 model with 62-test validation battery, single-path
- prediction, and batch inference. No ClickHouse required — inference only.
+Description: IONIS AI V22-gamma + PhysicsOverrideLayer validation and inference
+ Self-contained V22-gamma model with PhysicsOverrideLayer, KI7MT operator
+ test battery (17/17), TST-900 band x time tests, single-path prediction,
+ and batch inference. No ClickHouse required — inference only.
  .
- Commands: ionis-validate test | predict | custom | adif | info
+ Commands: ionis-validate test | predict | custom | info

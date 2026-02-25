@@ -1,10 +1,36 @@
 {
   "version": "v22",
+  "variant": "gamma",
+  "architecture": "IonisGate",
+  "phase": "Production (Phase 4.0)",
   "date_range": "2008-03-11 to 2026-02-21",
   "sample_size": 38760089,
+  "epoch": 100,
   "val_rmse": 0.8346196287579953,
   "val_pearson": 0.4591027498245239,
   "sfi_benefit": 0.48183250427246094,
   "storm_cost": 2.8148746490478516,
-  "rbn_full_sample": 0
+  "rbn_full_sample": 0,
+  "tst900_score": "9/11",
+  "ki7mt_hard_pass": "16/17 raw, 17/17 with PhysicsOverrideLayer",
+  "physics_override": "IF freq>=21MHz AND tx_solar<-6 AND rx_solar<-6 AND pred>-1.0sigma THEN clamp -1.0sigma",
+  "dnn_dim": 15,
+  "sidecar_hidden": 8,
+  "input_dim": 17,
+  "features": [
+    "distance", "freq_log", "hour_sin", "hour_cos",
+    "az_sin", "az_cos", "lat_diff", "midpoint_lat",
+    "season_sin", "season_cos", "vertex_lat",
+    "tx_solar_dep", "rx_solar_dep",
+    "freq_x_tx_dark", "freq_x_rx_dark",
+    "sfi", "kp_penalty"
+  ],
+  "v16_physics_laws": [
+    "IonisGate architecture (gates from trunk output 256-dim)",
+    "HuberLoss(delta=1.0)",
+    "Gate variance loss",
+    "Defibrillator init (weights 0.8-1.2, fc2.bias=-10)",
+    "Weight clamp [0.5, 2.0] after every step",
+    "Data recipe: WSPR + DXpedition + Contest (no RBN Full)"
+  ]
 }

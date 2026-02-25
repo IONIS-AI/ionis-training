@@ -1,8 +1,8 @@
 {
   "version": "v22",
   "variant": "gamma",
-  "phase": "Release",
-  "checkpoint": "ionis_v22.safetensors",
+  "phase": "Production (Phase 4.0)",
+  "checkpoint": "ionis_v22_gamma.safetensors",
 
   "model": {
     "architecture": "IonisGate",
