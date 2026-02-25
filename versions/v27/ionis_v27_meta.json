@@ -1,0 +1,16 @@
+{
+  "version": "v27",
+  "base_checkpoint": "../v22/ionis_v22_gamma.safetensors",
+  "date_range": "2008-03-11 to 2026-02-23",
+  "sample_size": 38760089,
+  "val_rmse": 0.8445023780494445,
+  "val_pearson": 0.4327312409877777,
+  "sfi_benefit": 0.4845609664916992,
+  "storm_cost": 3.0868749618530273,
+  "physics_loss": {
+    "penalty_factor": 10.0,
+    "closure_threshold": -1.0,
+    "solar_elev_threshold": -6.0,
+    "freq_mhz_threshold": 21.0
+  }
+}
