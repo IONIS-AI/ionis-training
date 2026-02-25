@@ -1,10 +1,10 @@
 # V22 Implementation Plan — Solar Depression Angles + Band×Darkness Interaction
 
-**Author:** Claude-M3 (Sage Node)
+**Author:** Dr. Watson (Sage Node)
 **Date:** 2026-02-21
-**Status:** APPROVED — Reviewed by 9975 and Gemini (2026-02-21)
+**Status:** APPROVED — Reviewed by Bob and Einstein (2026-02-21)
 
-**Gemini Notes:**
+**Einstein Notes:**
 - Cross-product mechanism confirmed as solution to gradient cancellation
 - Signage correct: solar_elevation positive=day, negative=night
 - CUDA port: use single-precision trig (sinf/cosf/asinf) for Tensor Core efficiency
@@ -31,7 +31,7 @@ V22 introduces **solar depression angles** with **explicit band×darkness cross-
 - TST-903/904: Mutual darkness effect too weak (3.5-4.6 dB vs 6+ dB needed)
 - TST-907: Time sensitivity only 2.5 dB (need 10+ dB)
 
-### Root Cause Analysis (Gemini)
+### Root Cause Analysis (Einstein)
 
 The sigmoid-based `mutual_darkness` feature provides a smooth 0-1 curve. The optimizer used it to align peaks (improving Pearson) but never learned the magnitude cliff.
 
@@ -324,7 +324,7 @@ Day/Night Delta: expect > 10 dB
 
 ---
 
-## Review Decisions (9975 Feedback — 2026-02-21)
+## Review Decisions (Bob Feedback — 2026-02-21)
 
 | Question | Decision | Rationale |
 |----------|----------|-----------|
@@ -349,4 +349,4 @@ Day/Night Delta: expect > 10 dB
 
 ---
 
-*Document ready for review. Awaiting feedback from 9975 and Gemini before implementation.*
+*Document ready for review. Awaiting feedback from Bob and Einstein before implementation.*

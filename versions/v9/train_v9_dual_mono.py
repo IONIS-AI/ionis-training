@@ -44,7 +44,7 @@ from torch.utils.data import Dataset, DataLoader, random_split
 
 # --- CONFIGURATION ---
 CSV_PATH = "data/training_v6_clean.csv"
-BATCH_SIZE = 8192  # Doubled from Phase 8 per Gemini's recommendation
+BATCH_SIZE = 8192  # Doubled from Phase 8 per Einstein's recommendation
 EPOCHS = 20  # HARD FREEZE TEST
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4

@@ -332,7 +332,7 @@ def build_features(tx_lat, tx_lon, rx_lat, rx_lon, freq_hz, sfi, kp,
         features.append(1.0 - kp / 9.0)                     # 16: kp_penalty
 
     elif include_physics_gates:
-        # V21-beta: Gemini physics gates (endpoint-specific darkness)
+        # V21-beta: Einstein physics gates (endpoint-specific darkness)
         tx_darkness = compute_endpoint_darkness(hour_utc, tx_lon)
         rx_darkness = compute_endpoint_darkness(hour_utc, rx_lon)
         mutual_darkness = tx_darkness * rx_darkness         # Both ends dark (160m/80m DX)

@@ -61,7 +61,7 @@ V23 regressed on 5 tests compared to V22-gamma:
 3. **Proceed with AUDIT-01/02/03** to investigate SFI sidecar bug
 4. **Consider V23-beta** with IRI features as auxiliary (not trunk) inputs
 
-## Next Steps (from Gemini/Opus AUDIT plan)
+## Next Steps (from Einstein/Patton AUDIT plan)
 
 - AUDIT-01: Widen sidecar clamp [0.5, 2.0] to [0.1, 5.0] (9975WX)
 - AUDIT-02: Replace Defibrillator init with Xavier Uniform (9975WX)

@@ -252,8 +252,8 @@ Physics constraints (SFI+ and Kp9-) remained positive throughout training, confi
 ## Acknowledgments
 
 This model was developed through collaborative debugging between:
-- **Claude Opus 4.5** (Anthropic) — Architecture implementation, code execution
-- **Gemini** (Google) — Physics diagnosis, constraint design guidance
+- **Dr. Watson** (Training Agent) — Architecture implementation, code execution
+- **Einstein** (Physics Consultant) — Physics diagnosis, constraint design guidance
 
 The Kp Inversion Problem was identified as survivorship bias in WSPR data (only strong signals decoded during storms), solved via Physics-Informed Machine Learning (PIML) with dual monotonic sidecars.
 
