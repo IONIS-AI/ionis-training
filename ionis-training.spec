@@ -117,7 +117,7 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
-* Tue Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.0-1
+* Wed Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.0-1
 - Upgrade validate subpackage from V20 to V22-gamma + PhysicsOverrideLayer
 - V22-gamma: 17/17 KI7MT hard pass (with override), TST-900 9/11
 - PhysicsOverrideLayer: deterministic clamp for high-band night closure
@@ -135,14 +135,14 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 - Remove shipped Modelfile from RPM (Ollama config, not training artifact)
 - Remove all .pyc files (generated at runtime)
 
-* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.3-1
+* Tue Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.3-1
 - Remove adif command from validate subpackage description
 
-* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.2-1
+* Tue Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.2-1
 - Security: replace pickle checkpoint (.pth) with safetensors format
 - Update spec and debian/rules for ionis_v20.safetensors
 
-* Mon Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.1-1
+* Tue Feb 17 2026 Greg Beam <ki7mt@yahoo.com> - 3.1.1-1
 - Security hardening: weights_only=True for all checkpoint loading
 - Add Debian packaging for Launchpad PPA (debian/ directory)
 
