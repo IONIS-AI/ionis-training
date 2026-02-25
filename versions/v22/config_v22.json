@@ -1,7 +1,7 @@
 {
   "version": "v22",
   "variant": "gamma",
-  "phase": "Development",
+  "phase": "Release",
   "checkpoint": "ionis_v22.safetensors",
 
   "model": {
