@@ -1,6 +1,6 @@
 Name:           ionis-training
 Version:        4.0.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        IONIS training and analysis scripts
 
 License:        GPL-3.0-or-later
@@ -117,6 +117,9 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Wed Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.0-2
+- Remove Debian packaging (Launchpad cannot build the full stack)
+
 * Wed Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.0-1
 - Upgrade validate subpackage from V20 to V22-gamma + PhysicsOverrideLayer
 - V22-gamma: 17/17 KI7MT hard pass (with override), TST-900 9/11
