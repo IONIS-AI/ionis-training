@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        4.0.2
+Version:        4.0.3
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -117,6 +117,13 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Thu Feb 26 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.3-1
+- Add Rule C: D-layer daytime override (freq <= 7.5 MHz, both day, dist > 1500 km)
+- Low bands showing CW/FT8 for DX at midday — D-layer absorption at 1/f²
+- Test battery expanded to 109 cases (6 categories), 109/109 PASS
+- All callers updated to pass distance_km to PhysicsOverrideLayer
+- KI7MT 17/17 PASS, TST-900 9/11, 0 regressions
+
 * Thu Feb 26 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.2-1
 - Fix PhysicsOverrideLayer: add Rule B (TX < -18 deg), clamp -2.0 sigma
 - Rule B is TX-only: RX-dark with TX-daylight not clamped (multi-hop)
