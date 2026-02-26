@@ -14,9 +14,10 @@ Usage:
     python tools/score_model.py --config versions/v20/config_v20.json --source contest --profile contest_cw
 
 Sources:
-    rbn     — rbn.signatures (56.6M aggregated CW/RTTY/PSK31 paths)
-    pskr    — pskr.bronze (raw FT8/FT4/CW/etc. spots, solar JOIN per day)
-    contest — validation.step_i_paths (1M contest QSO paths with lat/lon)
+    rbn      — rbn.signatures (56.6M aggregated CW/RTTY/PSK31 paths)
+    pskr     — pskr.bronze (raw FT8/FT4/CW/etc. spots, solar JOIN per day)
+    pskr_sig — pskr.signatures (aggregated PSKR paths, V22 feature-compatible)
+    contest  — validation.step_i_paths (1M contest QSO paths with lat/lon)
 
 Station profiles apply a link budget adjustment on top of the model's
 WSPR-equivalent prediction:
@@ -58,7 +59,9 @@ from train_common import (
     grid4_to_latlon,
     grid4_to_latlon_arrays,
     engineer_features,
+    solar_elevation_vectorized,
 )
+from physics_override import PhysicsOverrideLayer
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -501,6 +504,63 @@ def load_pskr(client, config, limit):
     return X, meta
 
 
+def load_pskr_signatures(client, config, limit):
+    """
+    Load PSKR signatures and engineer features.
+
+    PSKR signatures have the same schema as WSPR/RBN signatures — use
+    train_common.engineer_features directly. actual_mode defaults to 'FT8'
+    (88.8% of PSKR spots are FT8).
+
+    Requires pskr.signatures table (populated by
+    ionis-core/scripts/populate_pskr_signatures.py).
+    """
+    limit_clause = f" LIMIT {limit}" if limit else ""
+    order_clause = " ORDER BY rand()" if limit else ""
+
+    query = f"""
+    SELECT
+        tx_grid_4, rx_grid_4, band, hour, month,
+        median_snr, spot_count, snr_std, reliability,
+        avg_sfi, avg_kp, avg_distance, avg_azimuth
+    FROM pskr.signatures
+    WHERE avg_sfi > 0
+    {order_clause}{limit_clause}
+    """
+
+    print(f"  Loading PSKR signatures...")
+    t0 = time.perf_counter()
+    df = client.query_df(query)
+    elapsed = time.perf_counter() - t0
+    print(f"  Loaded {len(df):,} rows in {elapsed:.1f}s")
+
+    if len(df) == 0:
+        return None, None
+
+    # Strip null bytes from FixedString grids
+    for col in ('tx_grid_4', 'rx_grid_4'):
+        df[col] = df[col].astype(str).str.rstrip('\x00')
+
+    # Engineer features using train_common (signature schema)
+    features = engineer_features(df, config)
+
+    meta = {
+        'tx_grid_4':   df['tx_grid_4'].values,
+        'rx_grid_4':   df['rx_grid_4'].values,
+        'band':        df['band'].values.astype(np.int32),
+        'hour':        df['hour'].values.astype(np.uint8),
+        'month':       df['month'].values.astype(np.uint8),
+        'distance_km': df['avg_distance'].values.astype(np.uint32),
+        'azimuth':     df['avg_azimuth'].values.astype(np.uint16),
+        'actual_snr':  df['median_snr'].values.astype(np.float32),
+        'actual_mode': np.full(len(df), 'FT8', dtype=object),
+        'avg_sfi':     df['avg_sfi'].values.astype(np.float32),
+        'avg_kp':      df['avg_kp'].values.astype(np.float32),
+    }
+
+    return features, meta
+
+
 def load_contest(client, config, limit):
     """
     Load contest Step I paths and engineer features.
@@ -632,8 +692,9 @@ def denormalize_predictions(z_scores, band_ids, norm_constants):
 
 def score_and_insert(client, features, meta, model, config, device,
                      norm_constants, mode_thresholds, run_id, run_timestamp,
-                     model_version, source, profile_name, advantage_db):
-    """Run inference, apply link budget, insert results. Returns recall %."""
+                     model_version, source, profile_name, advantage_db,
+                     apply_override=True):
+    """Run inference, apply physics override + link budget, insert results. Returns recall %."""
     n = len(features)
 
     # Inference
@@ -642,6 +703,42 @@ def score_and_insert(client, features, meta, model, config, device,
     z_scores = run_inference(model, features, device)
     elapsed = time.perf_counter() - t0
     print(f"  Inference: {elapsed:.1f}s ({n / elapsed:,.0f} paths/sec)")
+
+    # Physics override (z-score space, before denormalization)
+    if apply_override:
+        print(f"  Applying PhysicsOverrideLayer...")
+        t0_ovr = time.perf_counter()
+
+        # Compute solar elevation from grid centroids
+        tx_lats, tx_lons = grid4_to_latlon_arrays(meta['tx_grid_4'])
+        rx_lats, rx_lons = grid4_to_latlon_arrays(meta['rx_grid_4'])
+
+        hour = meta['hour'].astype(np.float32)
+        month = meta['month'].astype(np.float32)
+        day_of_year = (month - 1) * 30.5 + 15  # mid-month approximation
+
+        tx_solar = solar_elevation_vectorized(tx_lats, tx_lons, hour, day_of_year)
+        rx_solar = solar_elevation_vectorized(rx_lats, rx_lons, hour, day_of_year)
+
+        # Get freq_mhz from band IDs
+        band_to_hz = config["band_to_hz"]
+        if isinstance(list(band_to_hz.keys())[0], str):
+            band_to_hz = {int(k): v for k, v in band_to_hz.items()}
+        freq_mhz = np.array([band_to_hz.get(int(b), 14097100) / 1e6
+                             for b in meta['band']], dtype=np.float32)
+
+        distance_km = meta['distance_km'].astype(np.float64)
+
+        override = PhysicsOverrideLayer()
+        z_scores, audit = override(z_scores, freq_mhz, tx_solar, rx_solar,
+                                   distance_km=distance_km)
+
+        elapsed_ovr = time.perf_counter() - t0_ovr
+        print(f"  Override: {audit['n_overridden']:,} / {n:,} paths clamped "
+              f"({audit['n_night_override']:,} night, {audit['n_day_override']:,} day) "
+              f"in {elapsed_ovr:.1f}s")
+    else:
+        print(f"  PhysicsOverrideLayer: SKIPPED (--no-override)")
 
     # Denormalize Z-scores -> dB (WSPR scale)
     predicted_snr = denormalize_predictions(z_scores, meta['band'], norm_constants)
@@ -766,13 +863,16 @@ def main():
         description='IONIS Batch Scorer — score model against ground truth sources')
     parser.add_argument('--config', required=True,
                         help='Path to model config JSON (e.g., versions/v20/config_v20.json)')
-    parser.add_argument('--source', required=True, choices=['rbn', 'pskr', 'contest'],
+    parser.add_argument('--source', required=True,
+                        choices=['rbn', 'pskr', 'pskr_sig', 'contest'],
                         help='Ground truth source to score against')
     parser.add_argument('--limit', type=int, default=0,
                         help='Max rows to score (0 = all)')
     parser.add_argument('--profile', default='wspr',
                         choices=list(PROFILES.keys()),
                         help='Station profile for link budget (default: wspr)')
+    parser.add_argument('--no-override', action='store_true',
+                        help='Skip PhysicsOverrideLayer (raw model output for comparison)')
     args = parser.parse_args()
 
     # Load config
@@ -811,7 +911,12 @@ def main():
 
     # Load model
     print(f"  Loading model...")
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    if checkpoint_path.endswith('.safetensors'):
+        from safetensors.torch import load_file as load_safetensors
+        state_dict = load_safetensors(checkpoint_path, device=str(device))
+    else:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        state_dict = checkpoint['model_state']
     model = IonisGate(
         dnn_dim=config["model"]["dnn_dim"],
         sidecar_hidden=config["model"]["sidecar_hidden"],
@@ -819,7 +924,7 @@ def main():
         kp_penalty_idx=config["model"]["kp_penalty_idx"],
         gate_init_bias=config["model"].get("gate_init_bias", -math.log(2.0)),
     ).to(device)
-    model.load_state_dict(checkpoint['model_state'])
+    model.load_state_dict(state_dict)
     model.eval()
 
     # Model loaded silently - details in config
@@ -855,6 +960,8 @@ def main():
         features, meta = load_rbn(client, config, limit)
     elif args.source == 'pskr':
         features, meta = load_pskr(client, config, limit)
+    elif args.source == 'pskr_sig':
+        features, meta = load_pskr_signatures(client, config, limit)
     elif args.source == 'contest':
         features, meta = load_contest(client, config, limit)
 
@@ -863,19 +970,27 @@ def main():
         client.close()
         return
 
+    # Determine override behavior and source label for results table
+    apply_override = not args.no_override
+    source_label = args.source
+    if args.no_override:
+        source_label = f"{args.source}_no_override"
+
     # Score and insert
     recall = score_and_insert(
         client, features, meta, model, config, device,
         norm_constants, mode_thresholds, run_id, run_timestamp,
-        model_version, args.source, args.profile, advantage_db,
+        model_version, source_label, args.profile, advantage_db,
+        apply_override=apply_override,
     )
 
     client.close()
 
     print("=" * 70)
     print(f"  Run ID:   {run_id}")
-    print(f"  Source:   {args.source}")
+    print(f"  Source:   {source_label}")
     print(f"  Profile:  {args.profile} (+{advantage_db:.1f} dB)")
+    print(f"  Override: {'ON' if apply_override else 'OFF (--no-override)'}")
     print(f"  Scored:   {len(features):,} paths")
     print(f"  Recall:   {recall:.2f}%")
     print("=" * 70)
