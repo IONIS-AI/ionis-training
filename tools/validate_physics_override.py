@@ -36,7 +36,7 @@ DEVEL_DIR = os.path.join(os.path.dirname(TRAINING_DIR), "ionis-devel")
 sys.path.insert(0, COMMON_DIR)
 
 from model import (
-    get_device, build_features, BAND_FREQ_HZ,
+    get_device, build_features, haversine_km, BAND_FREQ_HZ,
     IonisGate, grid4_to_latlon, solar_elevation_deg,
 )
 from physics_override import apply_override_to_prediction, PhysicsOverrideLayer
@@ -105,11 +105,12 @@ def predict_with_override(model, config, device, tx_grid, rx_grid, band,
     tx_lat, tx_lon = grid4_to_latlon(tx_grid)
     rx_lat, rx_lon = grid4_to_latlon(rx_grid)
     freq_mhz = BAND_FREQ_HZ[band] / 1e6
+    dist_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
     tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour_utc, day_of_year)
     rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour_utc, day_of_year)
 
     clamped, was_overridden = apply_override_to_prediction(
-        sigma, freq_mhz, tx_solar, rx_solar)
+        sigma, freq_mhz, tx_solar, rx_solar, distance_km=dist_km)
 
     return clamped, was_overridden, sigma, tx_solar, rx_solar
 

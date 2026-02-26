@@ -35,7 +35,7 @@ sys.path.insert(0, V22_DIR)
 
 from model import (
     get_device, build_features, BAND_FREQ_HZ,
-    IonisGate, grid4_to_latlon, solar_elevation_deg,
+    IonisGate, grid4_to_latlon, solar_elevation_deg, haversine_km,
 )
 from physics_override import apply_override_to_prediction, PhysicsOverrideLayer
 from safetensors.torch import load_file as load_safetensors
@@ -103,9 +103,10 @@ def predict_with_override(model, config, device, tx_grid, rx_grid, band,
     freq_mhz = BAND_FREQ_HZ[band] / 1e6
     tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour_utc, day_of_year)
     rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour_utc, day_of_year)
+    dist_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
 
     clamped, was_overridden = apply_override_to_prediction(
-        sigma, freq_mhz, tx_solar, rx_solar)
+        sigma, freq_mhz, tx_solar, rx_solar, distance_km=dist_km)
 
     return clamped, was_overridden, sigma, tx_solar, rx_solar
 

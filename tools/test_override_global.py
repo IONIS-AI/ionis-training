@@ -8,22 +8,28 @@ functions. No model needed — pure physics rule validation.
 Defects under test:
   1. TX in deep night (-55°), RX in daylight (+17°) — override did NOT fire
      because old rule required BOTH endpoints dark. Result: ham-stats.com shows
-     10m "CW" from Idaho to Europe at 1:20 AM local.
+     10m "CW" from Idaho to Europe at 1:20 AM local. (Fixed: Rule B)
   2. Old clamp at -1.0σ = -24.2 dB, above WSPR -28 dB threshold.
-     Display showed "WSPR" instead of "—" (closed).
+     Display showed "WSPR" instead of "—" (closed). (Fixed: -2.0σ clamp)
+  3. Low bands (160m/80m/40m) showing "CW"/"FT8" for DX paths at midday.
+     D-layer absorption at 1/f² makes this physically impossible beyond
+     NVIS range (~1500 km). (Fixed: Rule C)
 
-New rule:
+Override rules:
   Rule A: freq >= 21 MHz AND tx_solar < -6° AND rx_solar < -6° → clamp
-  Rule B: freq >= 21 MHz AND (tx_solar < -18° OR rx_solar < -18°) → clamp
+  Rule B: freq >= 21 MHz AND tx_solar < -18° → clamp
+  Rule C: freq <= 7.5 MHz AND tx_solar > 0° AND rx_solar > 0°
+          AND distance > 1500 km → clamp
   CLAMP = -2.0σ (≈ -30.9 dB, below WSPR -28 dB decode floor)
 
-Six test categories:
-  1. TX-Dark Closure — TX deep night, RX daylight (the primary defect)
-  2. Both-Dark Closure — both endpoints in darkness
-  3. Should-Be-Open — both endpoints in daylight, override must NOT fire
-  4. Greyline Edge — one endpoint in twilight, override must NOT fire
-  5. Low-Band Guard — 40m/80m/160m, override must NEVER fire
-  6. KI7MT Regression — all 18 KI7MT tests must still pass
+Seven test categories:
+  1. TX-Dark Closure — TX deep night, RX daylight (Rule B defect)
+  2. Both-Dark Closure — both endpoints in darkness (Rule A)
+  3. Should-Be-Open — both endpoints in daylight, high bands, no override
+  4. Greyline Edge — one endpoint in twilight, no override
+  5. Low-Band Guard — short-range/nighttime low bands, no override
+  6. D-Layer Daytime — low bands, both daylight, DX distance → override fires
+  7. (Reserved for KI7MT regression — run separately via validate_physics_override.py)
 
 Usage:
     python tools/test_override_global.py
@@ -44,10 +50,12 @@ TRAINING_DIR = os.path.dirname(SCRIPT_DIR)
 COMMON_DIR = os.path.join(TRAINING_DIR, "versions", "common")
 sys.path.insert(0, COMMON_DIR)
 
-from model import solar_elevation_deg, grid4_to_latlon, BAND_FREQ_HZ
+from model import solar_elevation_deg, grid4_to_latlon, haversine_km, BAND_FREQ_HZ
 from physics_override import (
     apply_override_to_prediction,
     FREQ_THRESHOLD_MHZ,
+    LOW_FREQ_THRESHOLD_MHZ,
+    DLAYER_DISTANCE_KM,
     CLAMP_SIGMA,
 )
 
@@ -88,12 +96,13 @@ GRIDS = {
 
 def make_test(test_id, category, tx_grid, rx_grid, band, hour_utc, month,
               day_of_year, sfi, kp, expect_override, expect_closed, physics):
-    """Build a test case dict with computed solar elevations."""
+    """Build a test case dict with computed solar elevations and distance."""
     tx_lat, tx_lon = grid4_to_latlon(tx_grid)
     rx_lat, rx_lon = grid4_to_latlon(rx_grid)
     tx_solar = solar_elevation_deg(tx_lat, tx_lon, hour_utc, day_of_year)
     rx_solar = solar_elevation_deg(rx_lat, rx_lon, hour_utc, day_of_year)
     freq_mhz = BAND_FREQ_HZ.get(band, 0) / 1e6
+    distance_km = haversine_km(tx_lat, tx_lon, rx_lat, rx_lon)
 
     return {
         "id": test_id,
@@ -109,6 +118,7 @@ def make_test(test_id, category, tx_grid, rx_grid, band, hour_utc, month,
         "kp": kp,
         "tx_solar": tx_solar,
         "rx_solar": rx_solar,
+        "distance_km": distance_km,
         "expect_override": expect_override,
         "expect_closed": expect_closed,
         "physics": physics,
@@ -782,8 +792,12 @@ def build_cat4_tests():
     return tests
 
 
-# ── Category 5: Low-Band Non-Interference ─────────────────────────────────────
-# 40m, 80m, 160m — override must NEVER fire regardless of solar conditions
+# ── Category 5: Low-Band Guard (override must NOT fire) ──────────────────────
+# Cases where low bands should NOT be overridden:
+# - Nighttime (low bands propagate best at night — no D-layer)
+# - TX dark, RX daylight (greyline/one-sided darkness)
+# - Short range daytime (NVIS, < 1500 km — D-layer rule doesn't apply)
+# - 20m/17m in any conditions (between high-band and low-band thresholds)
 
 def build_cat5_tests():
     tests = []
@@ -791,58 +805,254 @@ def build_cat5_tests():
 
     bands_low = ["40m", "80m", "160m"]
 
-    # Both dark (deep night) — low bands must NOT be overridden
+    # Both dark (deep night) — low bands propagate best at night
     for band in bands_low:
         tests.append(make_test(
             f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", band,
             3, 2, 57, 120, 3, False, False,
-            f"Both endpoints dark, {band}. Low bands propagate at night — override must NOT fire."))
+            f"Both endpoints dark, {band}. D-layer gone at night — low bands propagate."))
         n += 1
 
-    # TX deep dark, RX daylight — low bands must not fire
+    # TX deep dark, RX daylight — greyline paths, no override
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "40m",
         9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 40m. Low bands unaffected by override."))
+        "TX deep dark, RX daylight, 40m. Only one endpoint in D-layer — greyline preserved."))
     n += 1
 
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "80m",
         9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 80m. Low bands unaffected."))
+        "TX deep dark, RX daylight, 80m. Greyline/one-sided darkness preserved."))
     n += 1
 
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "160m",
         9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 160m. Low bands unaffected."))
+        "TX deep dark, RX daylight, 160m. Greyline preserved."))
     n += 1
 
-    # Both daylight — low bands must not fire
+    # Short range daytime — NVIS and ground-wave, below 1500 km
+    # DN13→FN20 is ~3000 km, too far. Use closer grids.
+    # DN13 (Idaho) → EL96 (Florida) at 18z: both daylight, ~3100 km — too far
+    # Use grids within 1500 km: DN13→DM79 (Nevada) ~800 km conceptually
+    # Actually we need real grids. DN13→DN65 (Montana) ~500 km
+    # grid4_to_latlon may not know arbitrary grids. Use known ones.
+    # FN20 (NE US) → EL96 (Florida) at 15z: both daylight, ~2000 km — still > 1500
+    # The closest pair in our grid set: PM95 (Japan) → OK03 (Thailand) = ~4600 km
+    # All our grid pairs are > 1500 km! So short-range tests need close grids.
+    # Use same grid for TX and RX (0 km) or adjacent grids.
+    # DN13→DN13 (0 km): trivially < 1500 km
     tests.append(make_test(
-        f"OVR-L{n:03d}", "low_band_guard", "EL96", "GH64", "40m",
-        15, 2, 57, 130, 2, False, False,
-        "Both daylight, 40m. Override never fires on low bands."))
+        f"OVR-L{n:03d}", "low_band_guard", "DN13", "DN13", "40m",
+        18, 2, 57, 120, 2, False, False,
+        "Same grid, 0 km. Both daylight, 40m. NVIS — override must NOT fire."))
     n += 1
 
     tests.append(make_test(
-        f"OVR-L{n:03d}", "low_band_guard", "PM95", "OK03", "80m",
-        3, 2, 57, 120, 2, False, False,
-        "Both daylight (Asia), 80m. Override never fires."))
+        f"OVR-L{n:03d}", "low_band_guard", "DN13", "DN13", "80m",
+        18, 2, 57, 120, 2, False, False,
+        "Same grid, 0 km. Both daylight, 80m. Local ground-wave — no override."))
     n += 1
 
-    # 20m — also not overridden (freq < 21 MHz)
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "DN13", "DN13", "160m",
+        18, 2, 57, 120, 2, False, False,
+        "Same grid, 0 km. Both daylight, 160m. Ground-wave — no override."))
+    n += 1
+
+    # IO91 (England) → JN48 (C. Europe) at 12z: both daylight, ~800 km
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "IO91", "JN48", "40m",
+        12, 2, 57, 120, 2, False, False,
+        "England→C.Europe ~800 km. Both daylight, 40m. Within NVIS range — no override."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "IO91", "JN48", "80m",
+        12, 2, 57, 120, 2, False, False,
+        "England→C.Europe ~800 km. Both daylight, 80m. Short path — no override."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "IO91", "JN48", "160m",
+        12, 2, 57, 120, 2, False, False,
+        "England→C.Europe ~800 km. Both daylight, 160m. Short path — no override."))
+    n += 1
+
+    # 20m — between thresholds (14 MHz: > 7.5 MHz, < 21 MHz) — NEVER overridden
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "20m",
         3, 2, 57, 120, 3, False, False,
-        "Both dark, 20m (14 MHz). Below 21 MHz threshold — 20m can propagate via residual F-layer."))
+        "Both dark, 20m (14 MHz). Between thresholds — no rule applies."))
     n += 1
 
-    # 17m boundary — 18.1 MHz is below 21 MHz, should NOT fire
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "20m",
+        15, 2, 57, 120, 2, False, False,
+        "Both daylight, 20m (14 MHz). Between thresholds — no rule applies."))
+    n += 1
+
+    # 17m boundary — 18.1 MHz is < 21 MHz (Rule A/B) and > 7.5 MHz (Rule C)
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "17m",
         3, 2, 57, 120, 3, False, False,
-        "Both dark, 17m (18.1 MHz). Below 21 MHz threshold — override does NOT fire."))
+        "Both dark, 17m (18.1 MHz). Between thresholds — no rule applies."))
+    n += 1
+
+    # 30m (10.1 MHz) — above 7.5 MHz, should NOT fire Rule C
+    tests.append(make_test(
+        f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "30m",
+        15, 2, 57, 120, 2, False, False,
+        "Both daylight, 30m (10.1 MHz). Above 7.5 MHz — Rule C does not apply."))
+    n += 1
+
+    return tests
+
+
+# ── Category 6: D-Layer Daytime Closure ──────────────────────────────────────
+# Low bands (≤ 7.5 MHz), both endpoints in daylight, DX distance (> 1500 km)
+# Override MUST fire — D-layer absorption makes propagation impossible
+
+def build_cat6_tests():
+    tests = []
+    n = 1
+
+    # DN13 (Idaho) → JN48 (Europe), both daylight at 15z, ~8500 km
+    for band in ["160m", "80m", "40m"]:
+        tests.append(make_test(
+            f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", band,
+            15, 2, 57, 120, 2, True, True,
+            f"Idaho→Europe ~8500 km, both daylight. {band} D-layer absorption kills DX."))
+        n += 1
+
+    # DN13 → PM95 (Japan) at 00z: Idaho=+12.2°, Japan=+82.3°, ~8300 km
+    # Wait — at 00z UTC Idaho is 5 PM local (sun still up in Feb?), Japan is noon+
+    # Let me use a time when both are in daylight
+    # Actually 00z: Idaho at ~17:00 local, in Feb sun sets ~17:30. Marginal.
+    # Use 21z: Idaho at ~14:00 local, Japan already past midnight (06:00 next day)
+    # Japan at 21z = 06:00 JST, barely sunrise
+    # Let me just use times where both are clearly in daylight.
+    # FN20 (NE US) → IO91 (England) at 15z: NEUS=+32.8°, England=+18.2°, ~5500 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "FN20", "IO91", "160m",
+        15, 2, 57, 120, 2, True, True,
+        "NE US→England ~5500 km, both daylight. 160m D-layer wall — impossible."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "FN20", "IO91", "80m",
+        15, 2, 57, 120, 2, True, True,
+        "NE US→England ~5500 km, both daylight. 80m D-layer absorption."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "FN20", "IO91", "40m",
+        15, 2, 57, 120, 2, True, True,
+        "NE US→England ~5500 km, both daylight. 40m D-layer kills DX."))
+    n += 1
+
+    # EL96 (Florida) → KG33 (S. Africa) at 12z: ~12000 km
+    # 12z: Florida=+3.7°, S.Africa=+65.9°
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "EL96", "KG33", "160m",
+        12, 2, 57, 130, 2, True, True,
+        "Florida→S.Africa ~12000 km, both daylight. 160m absolutely dead."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "EL96", "KG33", "80m",
+        12, 2, 57, 130, 2, True, True,
+        "Florida→S.Africa ~12000 km, both daylight. 80m D-layer absorption."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "EL96", "KG33", "40m",
+        12, 2, 57, 130, 2, True, True,
+        "Florida→S.Africa ~12000 km, both daylight. 40m D-layer kills at this distance."))
+    n += 1
+
+    # EL96 (Florida) → GH64 (Brazil) at 15z: ~7000 km
+    # 15z: Florida=+39.8°, Brazil=+83.7°
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "EL96", "GH64", "40m",
+        15, 2, 57, 130, 2, True, True,
+        "Florida→Brazil ~7000 km, both bright daylight. 40m D-layer DX dead."))
+    n += 1
+
+    # PM95 (Japan) → OK03 (Thailand) at 03z: ~4600 km
+    # 03z: Japan=+44.8°, Thailand=+49.2°
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "PM95", "OK03", "80m",
+        3, 2, 57, 120, 2, True, True,
+        "Japan→Thailand ~4600 km, both daylight. 80m D-layer absorption."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "PM95", "OK03", "160m",
+        3, 2, 57, 120, 2, True, True,
+        "Japan→Thailand ~4600 km, both daylight. 160m — D-layer wall."))
+    n += 1
+
+    # QF56 (Australia) → KG33 (S. Africa) at 06z: ~10800 km
+    # 06z: Australia=+29.3°, S.Africa=+28.3°
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "QF56", "KG33", "40m",
+        6, 2, 57, 130, 2, True, True,
+        "Australia→S.Africa ~10800 km, both daylight. 40m D-layer kills."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "QF56", "KG33", "160m",
+        6, 2, 57, 130, 2, True, True,
+        "Australia→S.Africa ~10800 km, both daylight. 160m impossible."))
+    n += 1
+
+    # KG33 (S. Africa) → GH64 (Brazil) at 12z: ~7800 km
+    # 12z: S.Africa=+65.9°, Brazil=+43.8°
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "KG33", "GH64", "80m",
+        12, 2, 57, 120, 2, True, True,
+        "S.Africa→Brazil ~7800 km, both bright. 80m D-layer absorption."))
+    n += 1
+
+    # October test — different season
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", "80m",
+        15, 10, 288, 120, 2, True, True,
+        "Idaho→Europe ~8500 km, both daylight. October. 80m D-layer kills."))
+    n += 1
+
+    # December test
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "FN20", "IO91", "160m",
+        15, 12, 355, 150, 2, True, True,
+        "NE US→England ~5500 km, both daylight. December. 160m dead."))
+    n += 1
+
+    # High SFI — Rule C fires regardless (D-layer gets WORSE with high SFI)
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", "160m",
+        15, 2, 57, 250, 1, True, True,
+        "Idaho→Europe, SFI=250, both daylight. High SFI makes D-layer worse — must fire."))
+    n += 1
+
+    # Boundary: just above 1500 km — DN13→FN20 ~3000 km, both daylight at 18z
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "FN20", "80m",
+        18, 2, 57, 120, 2, True, True,
+        "Idaho→NE US ~3000 km, both afternoon daylight. 80m D-layer at DX range."))
+    n += 1
+
+    # BP51 (Alaska) → EL96 (Florida) at 21z: ~5800 km
+    # 21z: Alaska needs to be in daylight... Alaska at 21z in Feb
+    # 21z = 12:00 AKST, Alaska sun up in Feb? Barely. Let me check via test.
+    # Actually, at 21z in Feb: Alaska at 61.5°N — sunrise ~17z, sunset ~03z (next day)
+    # So at 21z Alaska is in daylight. Florida at 21z = 4pm, definitely daylight.
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "BP51", "EL96", "40m",
+        21, 2, 57, 120, 2, True, True,
+        "Alaska→Florida ~5800 km, both daylight. 40m D-layer at DX distance."))
     n += 1
 
     return tests
@@ -858,7 +1068,8 @@ def run_single_test(test, verbose=False):
     test_sigma = 1.0  # Positive prediction that should be clamped if override fires
 
     clamped, was_overridden = apply_override_to_prediction(
-        test_sigma, test["freq_mhz"], test["tx_solar"], test["rx_solar"])
+        test_sigma, test["freq_mhz"], test["tx_solar"], test["rx_solar"],
+        distance_km=test.get("distance_km"))
 
     # Check override fired correctly
     override_correct = (was_overridden == test["expect_override"])
@@ -881,6 +1092,7 @@ def run_single_test(test, verbose=False):
         "closed_correct": closed_correct,
         "tx_solar": test["tx_solar"],
         "rx_solar": test["rx_solar"],
+        "distance_km": test.get("distance_km", 0),
     }
 
     return passed, detail
@@ -894,14 +1106,16 @@ def run_all_tests(verbose=False):
         ("Should-Be-Open", "should_be_open", build_cat3_tests()),
         ("Greyline Edge", "greyline_edge", build_cat4_tests()),
         ("Low-Band Guard", "low_band_guard", build_cat5_tests()),
+        ("D-Layer Daytime", "dlayer_daytime", build_cat6_tests()),
     ]
 
     print("OVERRIDE GLOBAL VALIDATION")
     print("=" * 72)
-    print(f"Override constants: FREQ >= {FREQ_THRESHOLD_MHZ} MHz, CLAMP = {CLAMP_SIGMA}σ "
-          f"({sigma_to_db(CLAMP_SIGMA):.1f} dB)")
-    print(f"WSPR decode floor: {WSPR_DECODE_FLOOR_DB} dB "
-          f"({db_to_sigma(WSPR_DECODE_FLOOR_DB):+.2f}σ)")
+    print(f"Rules A/B: freq >= {FREQ_THRESHOLD_MHZ} MHz (F-layer collapse)")
+    print(f"Rule C:    freq <= {LOW_FREQ_THRESHOLD_MHZ} MHz, dist > {DLAYER_DISTANCE_KM:.0f} km "
+          f"(D-layer absorption)")
+    print(f"Clamp: {CLAMP_SIGMA}σ ({sigma_to_db(CLAMP_SIGMA):.1f} dB) | "
+          f"WSPR floor: {WSPR_DECODE_FLOOR_DB} dB ({db_to_sigma(WSPR_DECODE_FLOOR_DB):+.2f}σ)")
     print()
 
     total_pass = 0
@@ -925,9 +1139,11 @@ def run_all_tests(verbose=False):
             if verbose:
                 status = "PASS" if passed else "FAIL"
                 ovr = "OVR" if detail["was_overridden"] else "   "
+                dist = test.get('distance_km', 0)
                 print(f"  [{status}] {test['id']:<10s} {test['band']:>4s} "
                       f"{test['tx_grid']}→{test['rx_grid']} "
                       f"TX:{test['tx_solar']:+6.1f}° RX:{test['rx_solar']:+6.1f}° "
+                      f"{dist:>6.0f}km "
                       f"{ovr} {detail['clamped_sigma']:+.2f}σ "
                       f"({detail['clamped_db']:+.1f} dB)")
 
@@ -949,8 +1165,9 @@ def run_all_tests(verbose=False):
         print()
         print("FAILURES:")
         for test, detail in all_failures:
+            dist = test.get('distance_km', 0)
             print(f"  {test['id']} ({test['category']}): {test['band']} "
-                  f"{test['tx_grid']}→{test['rx_grid']}")
+                  f"{test['tx_grid']}→{test['rx_grid']} ({dist:.0f} km)")
             print(f"    TX solar: {detail['tx_solar']:+.1f}°, "
                   f"RX solar: {detail['rx_solar']:+.1f}°")
             print(f"    Override fired: {detail['was_overridden']} "
