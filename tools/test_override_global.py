@@ -18,8 +18,8 @@ Defects under test:
 Override rules:
   Rule A: freq >= 21 MHz AND tx_solar < -6° AND rx_solar < -6° → clamp
   Rule B: freq >= 21 MHz AND tx_solar < -18° → clamp
-  Rule C: freq <= 7.5 MHz AND tx_solar > 0° AND rx_solar > 0°
-          AND distance > 1500 km → clamp
+  Rule C (severe): freq <= 4.0 MHz AND EITHER solar > 0° AND dist > 1500 km → clamp
+  Rule C (moderate): freq 4.0-7.5 MHz AND BOTH solar > 0° AND dist > 1500 km → clamp
   CLAMP = -2.0σ (≈ -30.9 dB, below WSPR -28 dB decode floor)
 
 Seven test categories:
@@ -55,6 +55,7 @@ from physics_override import (
     apply_override_to_prediction,
     FREQ_THRESHOLD_MHZ,
     LOW_FREQ_THRESHOLD_MHZ,
+    SEVERE_DLAYER_FREQ_MHZ,
     DLAYER_DISTANCE_KM,
     CLAMP_SIGMA,
 )
@@ -795,9 +796,10 @@ def build_cat4_tests():
 # ── Category 5: Low-Band Guard (override must NOT fire) ──────────────────────
 # Cases where low bands should NOT be overridden:
 # - Nighttime (low bands propagate best at night — no D-layer)
-# - TX dark, RX daylight (greyline/one-sided darkness)
+# - TX dark, RX daylight on 40m (greyline — moderate D-layer, signal punches through)
 # - Short range daytime (NVIS, < 1500 km — D-layer rule doesn't apply)
 # - 20m/17m in any conditions (between high-band and low-band thresholds)
+# NOTE: 80m/160m one-sided daylight now fires override (severe D-layer tier)
 
 def build_cat5_tests():
     tests = []
@@ -813,23 +815,11 @@ def build_cat5_tests():
             f"Both endpoints dark, {band}. D-layer gone at night — low bands propagate."))
         n += 1
 
-    # TX deep dark, RX daylight — greyline paths, no override
+    # TX deep dark, RX daylight — 40m greyline works (moderate D-layer tier)
     tests.append(make_test(
         f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "40m",
         9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 40m. Only one endpoint in D-layer — greyline preserved."))
-    n += 1
-
-    tests.append(make_test(
-        f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "80m",
-        9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 80m. Greyline/one-sided darkness preserved."))
-    n += 1
-
-    tests.append(make_test(
-        f"OVR-L{n:03d}", "low_band_guard", "DN13", "JN48", "160m",
-        9, 2, 57, 120, 3, False, False,
-        "TX deep dark, RX daylight, 160m. Greyline preserved."))
+        "TX deep dark, RX daylight, 40m. Moderate D-layer — 40m punches through one sunlit endpoint."))
     n += 1
 
     # Short range daytime — NVIS and ground-wave, below 1500 km
@@ -911,13 +901,16 @@ def build_cat5_tests():
 
 
 # ── Category 6: D-Layer Daytime Closure ──────────────────────────────────────
-# Low bands (≤ 7.5 MHz), both endpoints in daylight, DX distance (> 1500 km)
-# Override MUST fire — D-layer absorption makes propagation impossible
+# Low bands (≤ 7.5 MHz), DX distance (> 1500 km), D-layer active
+# Two tiers:
+#   80m/160m (≤ 4 MHz): EITHER endpoint in daylight → override fires (severe)
+#   40m/60m (4-7.5 MHz): BOTH endpoints in daylight → override fires (moderate)
 
 def build_cat6_tests():
     tests = []
     n = 1
 
+    # ── Both daylight — all low bands fire ──────────────────────────
     # DN13 (Idaho) → JN48 (Europe), both daylight at 15z, ~8500 km
     for band in ["160m", "80m", "40m"]:
         tests.append(make_test(
@@ -1053,6 +1046,83 @@ def build_cat6_tests():
         f"OVR-D{n:03d}", "dlayer_daytime", "BP51", "EL96", "40m",
         21, 2, 57, 120, 2, True, True,
         "Alaska→Florida ~5800 km, both daylight. 40m D-layer at DX distance."))
+    n += 1
+
+    # ── One-sided daylight: 80m/160m severe tier (EITHER > 0°) ──────
+    # These are the specific defect cases: one end in daylight, one dark.
+    # 80m/160m D-layer is so severe that ONE sunlit endpoint kills the path.
+
+    # DN13 (Idaho) day → PM95 (Japan) night, 160m at 16z (the reported defect)
+    # 16z: Idaho=+11° (afternoon), Japan=-64° (deep night). ~8300 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "PM95", "160m",
+        16, 2, 57, 120, 3, True, True,
+        "Idaho +11° (day) → Japan -64° (night). 160m D-layer above Idaho kills signal on first hop."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "PM95", "80m",
+        16, 2, 57, 120, 3, True, True,
+        "Idaho +11° (day) → Japan -64° (night). 80m D-layer above Idaho kills signal."))
+    n += 1
+
+    # DN13 day → QF56 (Oceania) night, 160m at 16z
+    # 16z: Idaho=+11°, Australia=~-38° (deep night). ~12500 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "QF56", "160m",
+        16, 2, 57, 120, 3, True, True,
+        "Idaho +11° (day) → Australia -38° (night). 160m dead — D-layer at Idaho."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "QF56", "80m",
+        16, 2, 57, 120, 3, True, True,
+        "Idaho +11° (day) → Australia -38° (night). 80m dead — D-layer at Idaho."))
+    n += 1
+
+    # TX dark, RX daylight — 80m/160m still fires (D-layer at RX end)
+    # DN13 night → JN48 day, 80m at 09z
+    # 09z: Idaho=-52.6°, Europe=+23.9°. ~8500 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", "80m",
+        9, 2, 57, 120, 3, True, True,
+        "Idaho -52.6° (night) → Europe +23.9° (day). 80m D-layer at Europe kills on last hop."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", "160m",
+        9, 2, 57, 120, 3, True, True,
+        "Idaho -52.6° (night) → Europe +23.9° (day). 160m D-layer at Europe kills on last hop."))
+    n += 1
+
+    # FN20 (NE US) day → PM95 (Japan) night, 160m at 18z
+    # 18z: NEUS=+16° (afternoon), Japan=-38° (night). ~10800 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "FN20", "PM95", "160m",
+        18, 2, 57, 120, 2, True, True,
+        "NE US +16° (day) → Japan -38° (night). 160m D-layer at NE US."))
+    n += 1
+
+    # EL96 (Florida) day → QF56 (Australia) night, 80m at 18z
+    # 18z: Florida=+28° (afternoon), Australia=-18° (deep night). ~15000 km
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "EL96", "QF56", "80m",
+        18, 2, 57, 130, 2, True, True,
+        "Florida +28° (day) → Australia -18° (night). 80m D-layer at Florida kills signal."))
+    n += 1
+
+    # 40m one-sided daylight: does NOT fire (moderate tier needs BOTH)
+    # This is a regression guard — 40m greyline DX is real
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "PM95", "40m",
+        16, 2, 57, 120, 3, False, False,
+        "Idaho +11° (day) → Japan -64° (night). 40m greyline — moderate D-layer, signal survives."))
+    n += 1
+
+    tests.append(make_test(
+        f"OVR-D{n:03d}", "dlayer_daytime", "DN13", "JN48", "40m",
+        9, 2, 57, 120, 3, False, False,
+        "Idaho -52.6° (night) → Europe +23.9° (day). 40m one-sided — override does NOT fire."))
     n += 1
 
     return tests
