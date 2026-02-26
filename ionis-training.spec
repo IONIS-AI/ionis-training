@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        4.0.1
+Version:        4.0.2
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -117,6 +117,13 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Thu Feb 26 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.2-1
+- Fix PhysicsOverrideLayer: add Rule B (TX < -18 deg), clamp -2.0 sigma
+- Rule B is TX-only: RX-dark with TX-daylight not clamped (multi-hop)
+- Clamp lowered from -1.0 to -2.0 sigma (below WSPR -28 dB floor)
+- Add test_override_global.py: 83-case global validation test battery
+- KI7MT 18/18 PASS, TST-900 9/11, 0 regressions
+
 * Wed Feb 25 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.1-1
 - Update README: V20 references to V22-gamma + PhysicsOverrideLayer
 
