@@ -38,7 +38,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TRAINING_DIR = os.path.dirname(SCRIPT_DIR)
 FIGURES_DIR = os.path.join(TRAINING_DIR, "figures")
 
-CH_HOST = os.environ.get("CH_HOST", "10.60.1.1")
+# Default is localhost, not this lab's DAC address. These scripts ship in the
+# ionis-training RPM on COPR, and 10.60.1.1 is a point-to-point link that exists
+# between two machines here and nowhere else -- as a shipped default it is a
+# connection failure for every other installer. Set CH_HOST, or --host where the
+# script takes one.
+CH_HOST = os.environ.get("CH_HOST", "localhost")
 CH_PORT = int(os.environ.get("CH_PORT", "8123"))
 
 # Grid dimensions
