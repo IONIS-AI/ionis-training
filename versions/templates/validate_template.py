@@ -10,6 +10,7 @@ Usage:
     python validate_template.py v17
 """
 
+import os
 import argparse
 import sys
 from pathlib import Path
@@ -25,7 +26,9 @@ from common import (
 )
 
 
-CH_HOST = "10.60.1.1"
+# A TEMPLATE: whatever is here is copied into every new version directory, so a
+# hardcoded address propagates rather than staying put.
+CH_HOST = os.environ.get("CH_HOST", "localhost")
 CH_PORT = 8123
 
 

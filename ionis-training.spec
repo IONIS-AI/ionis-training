@@ -1,5 +1,5 @@
 Name:           ionis-training
-Version:        4.0.3
+Version:        4.0.4
 Release:        1%{?dist}
 Summary:        IONIS training and analysis scripts
 
@@ -117,6 +117,19 @@ install -m 644 requirements-validate.txt %{buildroot}%{_datadir}/%{name}/
 # ── changelog ────────────────────────────────────────────────────────────────
 
 %changelog
+* Mon Sep 22 2026 Bob <bob@ipa.home.arpa> - 4.0.4-1
+- Host-neutrality for the shipped scripts. coverage_heatmap.py and
+  signature_search.py fell back to CH_HOST 10.60.1.1 -- a point-to-point DAC link
+  that exists between two machines here and nowhere else, so as a shipped default
+  it is a connection failure for every other installer. Now localhost; CH_HOST and
+  --host still override
+- versions/templates/validate_template.py had CH_HOST = "10.60.1.1" with no
+  override. It is a TEMPLATE, so the address was propagating into every new version
+  directory rather than staying in one file
+- versions/v2..v27 and archive/ deliberately UNCHANGED. Those are the record of how
+  each model was actually trained, they are not shipped, and editing them would
+  falsify the record
+
 * Thu Feb 26 2026 Greg Beam <ki7mt@yahoo.com> - 4.0.3-1
 - Add Rule C: D-layer daytime override (freq <= 7.5 MHz, both day, dist > 1500 km)
 - Low bands showing CW/FT8 for DX at midday — D-layer absorption at 1/f²

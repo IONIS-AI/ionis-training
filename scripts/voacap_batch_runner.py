@@ -17,7 +17,7 @@ Workflow:
     7. INSERT results into validation.step_i_voacap
 
 Usage:
-    python voacap_batch_runner.py [--workers 32] [--host 10.60.1.1]
+    python voacap_batch_runner.py [--workers 32] [--host clickhouse.example.net]
                                   [--sample 1000] [--dry-run]
 """
 

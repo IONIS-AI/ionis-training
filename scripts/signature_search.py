@@ -132,7 +132,7 @@ class SignatureSearch:
 
     def __init__(self, host: str = None, port: int = None):
         # Default to DAC link
-        self.host = host or os.environ.get("CH_HOST", "10.60.1.1")
+        self.host = host or os.environ.get("CH_HOST", "localhost")
         self.port = port or int(os.environ.get("CH_PORT", "8123"))
         self._client = None
 
@@ -400,7 +400,7 @@ def print_result(r: SearchResult):
 
 def run_tests(host: str = None):
     """Run 7 physics checks."""
-    host = host or os.environ.get("CH_HOST", "10.60.1.1")
+    host = host or os.environ.get("CH_HOST", "localhost")
     print("=" * 70)
     print("  Signature Search Test Suite (Step G)")
     print("=" * 70)
@@ -549,7 +549,7 @@ def main():
     parser.add_argument("--sfi", type=float, default=150.0, help="Solar Flux Index (default 150)")
     parser.add_argument("--kp", type=float, default=2.0, help="Kp index (default 2)")
     parser.add_argument("--k", type=int, default=50, help="Number of neighbors (default 50)")
-    parser.add_argument("--host", default=None, help="ClickHouse host (default: DAC 10.60.1.1)")
+    parser.add_argument("--host", default=None, help="ClickHouse host (default: $CH_HOST, else localhost)")
     parser.add_argument("--json", action="store_true", help="JSON output")
     parser.add_argument("--test", action="store_true", help="Run built-in test suite")
 
